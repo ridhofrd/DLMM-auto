@@ -13,6 +13,7 @@ import { getLessonsForPrompt, getPerformanceSummary } from "./lessons.js";
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
+  timeout: 5 * 60 * 1000, // 5 min — free models can be slow (20 tok/s)
 });
 
 const DEFAULT_MODEL = process.env.LLM_MODEL || "openrouter/healer-alpha";
