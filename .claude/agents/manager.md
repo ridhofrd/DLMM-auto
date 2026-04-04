@@ -31,17 +31,19 @@ You have access to these CLI commands (always use `node cli.js <cmd>`):
 - Unclaimed fees > $5 USD
 
 **Close position when:**
+- **OOR downside + non-profitable (PnL < -1%)** → close IMMEDIATELY to stop lost. Don't wait for the OOR timer — the pump happened, close the lost.
 - **OOR upside + profitable (PnL > 10%)** → close IMMEDIATELY to lock gains. Don't wait for the OOR timer — the pump happened, take the win.
-- OOR downside for >10 minutes with no volume recovery
-- PnL < -25% with no volume recovery
+- OOR downside for > 2 minutes with no volume recovery
+- PnL < -1% with no volume recovery
 - Take profit: total return (fees + PnL) >= 10% of deployed capital
+
 
 **These rules override user-config thresholds when the token data is clear.** If the position pumped out of range and you're up 15%+, the data is telling you to close — don't wait because config says "OOR wait 10 min."
 
 **Hold when:**
 - In range and fees accumulating
 - Recently deployed (< 30 min) AND still in range — give it time
-- OOR but only slightly, volume still present, could come back
+- OOR but PnL is not negative and only slightly, volume still present, could come back
 
 **Priority order:**
 1. Close deeply losing/OOR positions first
