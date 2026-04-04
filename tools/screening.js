@@ -2,6 +2,7 @@ import { config } from "../config.js";
 import { isBlacklisted } from "../token-blacklist.js";
 import { isDevBlocked, getBlockedDevs } from "../dev-blocklist.js";
 import { log } from "../logger.js";
+import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
 
 const DATAPI_JUP = "https://datapi.jup.ag/v1";
 
@@ -123,22 +124,51 @@ export async function getTopCandidates({ limit = 10 } = {}) {
   const occupiedMints = new Set(positions.map((p) => p.base_mint).filter(Boolean));
 
   const eligible = pools
-    .filter((p) => !occupiedPools.has(p.pool) && !occupiedMints.has(p.base?.mint))
+    .filter((p) => {
+      if (occupiedPools.has(p.pool) || occupiedMints.has(p.base?.mint)) return false;
+      if (isPoolOnCooldown(p.pool)) {
+        log("screening", `Filtered cooldown pool ${p.name} (${p.pool.slice(0, 8)})`);
+        return false;
+      }
+      if (isBaseMintOnCooldown(p.base?.mint)) {
+        log("screening", `Filtered cooldown token ${p.base?.symbol} (${p.base?.mint?.slice(0, 8)})`);
+        return false;
+      }
+      return true;
+    })
     .slice(0, limit);
 
   // Enrich with OKX data — advanced info (risk/bundle/sniper) + ATH price (no API key required)
   if (eligible.length > 0) {
     const { getAdvancedInfo, getPriceInfo, getClusterList, getRiskFlags } = await import("./okx.js");
     const okxResults = await Promise.allSettled(
-      eligible.map((p) => p.base?.mint
-        ? Promise.all([getAdvancedInfo(p.base.mint), getPriceInfo(p.base.mint), getClusterList(p.base.mint), getRiskFlags(p.base.mint)])
-        : Promise.resolve([null, null, [], null])
-      )
+      eligible.map(async (p) => {
+        if (!p.base?.mint) return { adv: null, price: null, clusters: [], risk: null };
+        const [adv, price, clusters, risk] = await Promise.allSettled([
+          getAdvancedInfo(p.base.mint),
+          getPriceInfo(p.base.mint),
+          getClusterList(p.base.mint),
+          getRiskFlags(p.base.mint),
+        ]);
+
+        const mintShort = p.base.mint.slice(0, 8);
+        if (adv.status !== "fulfilled")      log("okx", `advanced-info unavailable for ${p.name} (${mintShort})`);
+        if (price.status !== "fulfilled")    log("okx", `price-info unavailable for ${p.name} (${mintShort})`);
+        if (clusters.status !== "fulfilled") log("okx", `cluster-list unavailable for ${p.name} (${mintShort})`);
+        if (risk.status !== "fulfilled")     log("okx", `risk-check unavailable for ${p.name} (${mintShort})`);
+
+        return {
+          adv: adv.status === "fulfilled" ? adv.value : null,
+          price: price.status === "fulfilled" ? price.value : null,
+          clusters: clusters.status === "fulfilled" ? clusters.value : [],
+          risk: risk.status === "fulfilled" ? risk.value : null,
+        };
+      })
     );
     for (let i = 0; i < eligible.length; i++) {
       const r = okxResults[i];
       if (r.status !== "fulfilled") continue;
-      const [adv, price, clusters, risk] = r.value;
+      const { adv, price, clusters, risk } = r.value;
       if (adv) {
         eligible[i].risk_level      = adv.risk_level;
         eligible[i].bundle_pct      = adv.bundle_pct;

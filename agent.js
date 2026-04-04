@@ -4,8 +4,27 @@ import { buildSystemPrompt } from "./prompt.js";
 import { executeTool } from "./tools/executor.js";
 import { tools } from "./tools/definitions.js";
 
-const MANAGER_TOOLS  = new Set(["close_position", "claim_fees", "swap_token", "update_config", "get_position_pnl", "get_my_positions", "set_position_note", "add_pool_note", "get_wallet_balance"]);
-const SCREENER_TOOLS = new Set(["deploy_position", "get_active_bin", "get_top_candidates", "check_smart_wallets_on_pool", "get_token_holders", "get_token_narrative", "get_token_info", "search_pools", "get_pool_memory", "add_pool_note", "add_to_blacklist", "update_config", "get_wallet_balance", "get_my_positions"]);
+const MANAGER_TOOLS  = new Set(["close_position", "claim_fees", "swap_token", "get_position_pnl", "get_my_positions", "get_wallet_balance"]);
+const SCREENER_TOOLS = new Set(["deploy_position", "get_active_bin", "get_top_candidates", "check_smart_wallets_on_pool", "get_token_holders", "get_token_narrative", "get_token_info", "search_pools", "get_pool_memory", "get_wallet_balance", "get_my_positions"]);
+const GENERAL_INTENT_ONLY_TOOLS = new Set([
+  "self_update",
+  "update_config",
+  "add_to_blacklist",
+  "remove_from_blacklist",
+  "block_deployer",
+  "unblock_deployer",
+  "add_pool_note",
+  "set_position_note",
+  "add_smart_wallet",
+  "remove_smart_wallet",
+  "add_lesson",
+  "pin_lesson",
+  "unpin_lesson",
+  "clear_lessons",
+  "add_strategy",
+  "remove_strategy",
+  "set_active_strategy",
+]);
 
 // Intent → tool subsets for GENERAL role
 const INTENT_TOOLS = {
@@ -59,7 +78,7 @@ function getToolsForRole(agentType, goal = "") {
   }
 
   // Fall back to all tools if no intent matched
-  if (matched.size === 0) return tools;
+  if (matched.size === 0) return tools.filter(t => !GENERAL_INTENT_ONLY_TOOLS.has(t.function.name));
   return tools.filter(t => matched.has(t.function.name));
 }
 import { getWalletBalances } from "./tools/wallet.js";
@@ -87,6 +106,29 @@ function shouldRequireRealToolUse(goal, agentType, requireTool) {
   return TOOL_REQUIRED_INTENTS.test(goal);
 }
 
+function buildMessages(systemPrompt, sessionHistory, goal, providerMode = "system") {
+  if (providerMode === "user_embedded") {
+    return [
+      ...sessionHistory,
+      {
+        role: "user",
+        content: `[SYSTEM INSTRUCTIONS]\n${systemPrompt}\n\n[USER REQUEST]\n${goal}`,
+      },
+    ];
+  }
+
+  return [
+    { role: "system", content: systemPrompt },
+    ...sessionHistory,
+    { role: "user", content: goal },
+  ];
+}
+
+function isSystemRoleError(error) {
+  const message = String(error?.message || error?.error?.message || error || "");
+  return /invalid message role:\s*system/i.test(message);
+}
+
 /**
  * Core ReAct agent loop.
  *
@@ -95,7 +137,7 @@ function shouldRequireRealToolUse(goal, agentType, requireTool) {
  * @returns {string} - The agent's final text response
  */
 export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHistory = [], agentType = "GENERAL", model = null, maxOutputTokens = null, options = {}) {
-  const { requireTool = false } = options;
+  const { requireTool = false, interactive = false, onToolStart = null, onToolFinish = null } = options;
   // Build dynamic system prompt with current portfolio state
   const [portfolio, positions] = await Promise.all([getWalletBalances(), getMyPositions()]);
   const stateSummary = getStateSummary();
@@ -103,11 +145,8 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
   const perfSummary = getPerformanceSummary();
   const systemPrompt = buildSystemPrompt(agentType, portfolio, positions, stateSummary, lessons, perfSummary);
 
-  const messages = [
-    { role: "system", content: systemPrompt },
-    ...sessionHistory,          // inject prior conversation turns
-    { role: "user", content: goal },
-  ];
+  let providerMode = "system";
+  let messages = buildMessages(systemPrompt, sessionHistory, goal, providerMode);
 
   // Track write tools fired this session — prevent the model from calling the same
   // destructive tool twice (e.g. deploy twice, swap twice after auto-swap)
@@ -135,14 +174,25 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
       const toolChoice = (step === 0 && (ACTION_INTENTS.test(goal) || mustUseRealTool)) ? "required" : "auto";
 
       for (let attempt = 0; attempt < 3; attempt++) {
-        response = await client.chat.completions.create({
-          model: usedModel,
-          messages,
-          tools: getToolsForRole(agentType, goal),
-          tool_choice: toolChoice,
-          temperature: config.llm.temperature,
-          max_tokens: maxOutputTokens ?? config.llm.maxTokens,
-        });
+        try {
+          response = await client.chat.completions.create({
+            model: usedModel,
+            messages,
+            tools: getToolsForRole(agentType, goal),
+            tool_choice: toolChoice,
+            temperature: config.llm.temperature,
+            max_tokens: maxOutputTokens ?? config.llm.maxTokens,
+          });
+        } catch (error) {
+          if (providerMode === "system" && isSystemRoleError(error)) {
+            providerMode = "user_embedded";
+            messages = buildMessages(systemPrompt, sessionHistory, goal, providerMode);
+            log("agent", "Provider rejected system role — retrying with embedded system instructions");
+            attempt -= 1;
+            continue;
+          }
+          throw error;
+        }
         if (response.choices?.length) break;
         const errCode = response.error?.code;
         if (errCode === 502 || errCode === 503 || errCode === 529) {
@@ -204,8 +254,10 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
             };
           }
           messages.push({
-            role: "system",
-            content: "You have not used any tool yet. This request requires real tool execution or live tool-backed data. Do not answer from memory or inference. Call the appropriate tool first, then report only the real result.",
+            role: providerMode === "system" ? "system" : "user",
+            content: providerMode === "system"
+              ? "You have not used any tool yet. This request requires real tool execution or live tool-backed data. Do not answer from memory or inference. Call the appropriate tool first, then report only the real result."
+              : "[SYSTEM REMINDER]\nYou have not used any tool yet. This request requires real tool execution or live tool-backed data. Do not answer from memory or inference. Call the appropriate tool first, then report only the real result.",
           });
           continue;
         }
@@ -235,13 +287,29 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
         // Block once-per-session tools from firing a second time
         if (ONCE_PER_SESSION.has(functionName) && firedOnce.has(functionName)) {
           log("agent", `Blocked duplicate ${functionName} call — already executed this session`);
+          await onToolFinish?.({
+            name: functionName,
+            args: functionArgs,
+            result: { blocked: true, reason: `${functionName} already attempted this session — do not retry. If it failed, report the error and stop.` },
+            success: false,
+            step,
+          });
           return {
             role: "tool",
             tool_call_id: toolCall.id,
             content: JSON.stringify({ blocked: true, reason: `${functionName} already attempted this session — do not retry. If it failed, report the error and stop.` }),
           };
         }
+
+        await onToolStart?.({ name: functionName, args: functionArgs, step });
         const result = await executeTool(functionName, functionArgs);
+        await onToolFinish?.({
+          name: functionName,
+          args: functionArgs,
+          result,
+          success: result?.success !== false && !result?.error && !result?.blocked,
+          step,
+        });
 
         // Lock deploy_position after first attempt regardless of outcome — retrying is never right
         // For close/swap: only lock on success so genuine failures can be retried

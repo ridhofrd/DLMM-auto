@@ -9,7 +9,7 @@ import { getTopCandidates } from "./tools/screening.js";
 import { config, reloadScreeningThresholds, computeDeployAmount } from "./config.js";
 import { evolveThresholds, getPerformanceSummary } from "./lessons.js";
 import { registerCronRestarter } from "./tools/executor.js";
-import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled } from "./telegram.js";
+import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
 import { generateBriefing } from "./briefing.js";
 import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, updatePnlAndCheckExits } from "./state.js";
 import { getActiveStrategy } from "./strategy-library.js";
@@ -66,6 +66,17 @@ function stripThink(text) {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 
+function sanitizeUntrustedPromptText(text, maxLen = 500) {
+  if (!text) return null;
+  const cleaned = String(text)
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[<>`]/g, "")
+    .trim()
+    .slice(0, maxLen);
+  return cleaned ? JSON.stringify(cleaned) : null;
+}
+
 async function runBriefing() {
   log("cron", "Starting morning briefing");
   try {
@@ -111,16 +122,21 @@ export async function runManagementCycle({ silent = false } = {}) {
   log("cron", "Starting management cycle");
   let mgmtReport = null;
   let positions = [];
+  let liveMessage = null;
   const screeningCooldownMs = 5 * 60 * 1000;
 
   try {
+    if (!silent && telegramEnabled()) {
+      liveMessage = await createLiveMessage("🔄 Management Cycle", "Evaluating positions...");
+    }
     const livePositions = await getMyPositions({ force: true }).catch(() => null);
     positions = livePositions?.positions || [];
 
     if (positions.length === 0) {
       log("cron", "No open positions — triggering screening cycle");
+      mgmtReport = "No open positions. Triggering screening cycle.";
       runScreeningCycle().catch((e) => log("cron_error", `Triggered screening failed: ${e.message}`));
-      return null;
+      return mgmtReport;
     }
 
     // Snapshot + load pool memory
@@ -267,11 +283,15 @@ RULES:
 
 Execute the required actions. Do NOT re-evaluate CLOSE/CLAIM — rules already applied. Just execute.
 After executing, write a brief one-line result per position.
-      `, config.llm.maxSteps, [], "MANAGER", config.llm.managementModel, 2048);
+      `, config.llm.maxSteps, [], "MANAGER", config.llm.managementModel, 2048, {
+        onToolStart: async ({ name }) => { await liveMessage?.toolStart(name); },
+        onToolFinish: async ({ name, result, success }) => { await liveMessage?.toolFinish(name, result, success); },
+      });
 
       mgmtReport += `\n\n${content}`;
     } else {
       log("cron", "Management: all positions STAY — skipping LLM");
+      await liveMessage?.note("No tool actions needed.");
     }
 
     // Trigger screening after management
@@ -287,7 +307,10 @@ After executing, write a brief one-line result per position.
   } finally {
     _managementBusy = false;
     if (!silent && telegramEnabled()) {
-      if (mgmtReport) sendMessage(`🔄 Management Cycle\n\n${stripThink(mgmtReport)}`).catch(() => { });
+      if (mgmtReport) {
+        if (liveMessage) await liveMessage.finalize(stripThink(mgmtReport)).catch(() => {});
+        else sendMessage(`🔄 Management Cycle\n\n${stripThink(mgmtReport)}`).catch(() => { });
+      }
       for (const p of positions) {
         if (!p.in_range && p.minutes_out_of_range >= config.management.outOfRangeWaitMinutes) {
           notifyOutOfRange({ pair: p.pair, minutesOOR: p.minutes_out_of_range }).catch(() => { });
@@ -308,27 +331,35 @@ export async function runScreeningCycle({ silent = false } = {}) {
 
   // Hard guards — don't even run the agent if preconditions aren't met
   let prePositions, preBalance;
+  let liveMessage = null;
+  let screenReport = null;
   try {
     [prePositions, preBalance] = await Promise.all([getMyPositions({ force: true }), getWalletBalances()]);
     if (prePositions.total_positions >= config.risk.maxPositions) {
       log("cron", `Screening skipped — max positions reached (${prePositions.total_positions}/${config.risk.maxPositions})`);
+      screenReport = `Screening skipped — max positions reached (${prePositions.total_positions}/${config.risk.maxPositions}).`;
       _screeningBusy = false;
-      return null;
+      return screenReport;
     }
     const minRequired = config.management.deployAmountSol + config.management.gasReserve;
-    if (preBalance.sol < minRequired) {
+    const isDryRun = process.env.DRY_RUN === "true";
+    if (!isDryRun && preBalance.sol < minRequired) {
       log("cron", `Screening skipped — insufficient SOL (${preBalance.sol.toFixed(3)} < ${minRequired} needed for deploy + gas)`);
+      screenReport = `Screening skipped — insufficient SOL (${preBalance.sol.toFixed(3)} < ${minRequired} needed for deploy + gas).`;
       _screeningBusy = false;
-      return null;
+      return screenReport;
     }
   } catch (e) {
     log("cron_error", `Screening pre-check failed: ${e.message}`);
+    screenReport = `Screening pre-check failed: ${e.message}`;
     _screeningBusy = false;
-    return null;
+    return screenReport;
+  }
+  if (!silent && telegramEnabled()) {
+    liveMessage = await createLiveMessage("🔍 Screening Cycle", "Scanning candidates...");
   }
   timers.screeningLastRun = Date.now();
   log("cron", `Starting screening cycle [model: ${config.llm.screeningModel}]`);
-  let screenReport = null;
   try {
     // Reuse pre-fetched balance — no extra RPC call needed
     const currentBalance = preBalance;
@@ -409,6 +440,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
         pool.is_rugpull != null ? `rugpull=${pool.is_rugpull ? "YES" : "NO"}` : null,
         pool.is_wash != null ? `wash=${pool.is_wash ? "YES" : "NO"}` : null,
       ].filter(Boolean).join(", ");
+      const okxUnavailable = !okxParts && pool.price_vs_ath_pct == null;
 
       const okxTags = [
         pool.smart_money_buy    ? "smart_money_buy"    : null,
@@ -422,14 +454,14 @@ export async function runScreeningCycle({ silent = false } = {}) {
         `POOL: ${pool.name} (${pool.pool})`,
         `  metrics: bin_step=${pool.bin_step}, fee_pct=${pool.fee_pct}%, fee_tvl=${pool.fee_active_tvl_ratio}, vol=$${pool.volume_window}, tvl=$${pool.active_tvl}, volatility=${pool.volatility}, mcap=$${pool.mcap}, organic=${pool.organic_score}${pool.token_age_hours != null ? `, age=${pool.token_age_hours}h` : ""}`,
         `  audit: top10=${top10Pct}%, bots=${botPct}%, fees=${feesSol}SOL${launchpad ? `, launchpad=${launchpad}` : ""}`,
-        okxParts ? `  okx: ${okxParts}` : null,
+        okxParts ? `  okx: ${okxParts}` : okxUnavailable ? `  okx: unavailable` : null,
         okxTags  ? `  tags: ${okxTags}` : null,
         pool.price_vs_ath_pct != null ? `  ath: price_vs_ath=${pool.price_vs_ath_pct}%${pool.top_cluster_trend ? `, top_cluster=${pool.top_cluster_trend}` : ""}` : null,
         `  smart_wallets: ${sw?.in_pool?.length ?? 0} present${sw?.in_pool?.length ? ` → CONFIDENCE BOOST (${sw.in_pool.map(w => w.name).join(", ")})` : ""}`,
         activeBin != null ? `  active_bin: ${activeBin}` : null,
         priceChange != null ? `  1h: price${priceChange >= 0 ? "+" : ""}${priceChange}%, net_buyers=${netBuyers ?? "?"}` : null,
-        n?.narrative ? `  narrative: ${n.narrative.slice(0, 500)}` : `  narrative: none`,
-        mem ? `  memory: ${mem}` : null,
+        n?.narrative ? `  narrative_untrusted: ${sanitizeUntrustedPromptText(n.narrative, 500)}` : `  narrative_untrusted: none`,
+        mem ? `  memory_untrusted: ${sanitizeUntrustedPromptText(mem, 500)}` : null,
       ].filter(Boolean).join("\n");
 
       return block;
@@ -448,23 +480,57 @@ STEPS:
 2. Call deploy_position (active_bin is pre-fetched above — no need to call get_active_bin).
    bins_below = round(35 + (volatility/5)*55) clamped to [35,90].
 3. Report in this exact format (no tables, no extra sections):
-   Decision: DEPLOYED PAIR
-   pool: <name> | <pool address>
-   amount: <deploy amount> SOL | strategy=<strategy> | active_bin=<bin>
-   metrics: bin_step=X | fee=X% | fee_tvl=X% | volume=$X | tvl=$X | volatility=X | organic=X | mcap=$X
-   holder_audit: top10=X% | bots=X% | fees=XSOL | token_age=Xh
-   okx: risk=X | bundle=X% | sniper=X% | suspicious=X% | ath=X% | rugpull=Y/N | wash=Y/N
-   smart_wallets: <names or none>
-   range: minPrice→maxPrice (downside=(minPrice/maxPrice-1)*100%)
-   narrative: <1-2 sentences on what the token/pool is and why it has attention>
-   analysis: <2-4 sentences covering why this setup is attractive right now, key risks, and what outweighed the alternatives>
-   reason: <one decisive sentence explaining why this pool won over the rest>
-   rejected: <one short sentence on why the next best alternatives were passed over>
+   🚀 DEPLOYED
+
+   <pool name>
+   <pool address>
+
+   ◎ <deploy amount> SOL | <strategy> | bin <active_bin>
+   Range: <minPrice> → <maxPrice>
+   Downside buffer: <negative %>
+
+   MARKET
+   Fee/TVL: <x>%
+   Volume: $<x>
+   TVL: $<x>
+   Volatility: <x>
+   Organic: <x>
+   Mcap: $<x>
+   Age: <x>h
+
+   AUDIT
+   Top10: <x>%
+   Bots: <x>%
+   Fees paid: <x> SOL
+   Smart wallets: <names or none>
+
+   RISK
+   <If OKX advanced/risk data exists, list only the fields that actually exist: Risk level, Bundle, Sniper, Suspicious, ATH distance, Rugpull, Wash.>
+   <If only rugpull/wash exist, list just those.>
+   <If OKX enrichment is missing, write exactly: OKX: unavailable>
+
+   WHY THIS WON
+   <2-4 concise sentences on why this pool won, key risks, and why it still beat the alternatives>
 4. If no pool qualifies, report in this exact format instead:
-   Decision: NO DEPLOY
-   analysis: <2-4 sentences explaining why current candidates were rejected>
-   rejected: <short semicolon-separated reasons for the top candidates that were skipped>
-      `, config.llm.maxSteps, [], "SCREENER", config.llm.screeningModel, 2048);
+   ⛔ NO DEPLOY
+
+   Cycle finished with no valid entry.
+
+   BEST LOOKING CANDIDATE
+   <name or none>
+
+   WHY SKIPPED
+   <2-4 concise sentences explaining why nothing was good enough>
+
+   REJECTED
+   <short flat list of top candidate names and why they were skipped>
+IMPORTANT:
+- Never write "unknown" for OKX. Use real values, omit missing fields, or write exactly "OKX: unavailable".
+- Keep the whole report compact and highly scannable for Telegram.
+      `, config.llm.maxSteps, [], "SCREENER", config.llm.screeningModel, 2048, {
+        onToolStart: async ({ name }) => { await liveMessage?.toolStart(name); },
+        onToolFinish: async ({ name, result, success }) => { await liveMessage?.toolFinish(name, result, success); },
+      });
     screenReport = content;
   } catch (error) {
     log("cron_error", `Screening cycle failed: ${error.message}`);
@@ -472,7 +538,10 @@ STEPS:
   } finally {
     _screeningBusy = false;
     if (!silent && telegramEnabled()) {
-      if (screenReport) sendMessage(`🔍 Screening Cycle\n\n${stripThink(screenReport)}`).catch(() => { });
+      if (screenReport) {
+        if (liveMessage) await liveMessage.finalize(stripThink(screenReport)).catch(() => {});
+        else sendMessage(`🔍 Screening Cycle\n\n${stripThink(screenReport)}`).catch(() => { });
+      }
     }
   }
   return screenReport;
@@ -698,10 +767,12 @@ if (isTTY) {
     }
   }
 
-  async function telegramHandler(text) {
+  async function telegramHandler(msg) {
+    const text = msg?.text?.trim();
+    if (!text) return;
     if (_managementBusy || _screeningBusy || busy) {
       if (_telegramQueue.length < 5) {
-        _telegramQueue.push(text);
+        _telegramQueue.push(msg);
         sendMessage(`⏳ Queued (${_telegramQueue.length} in queue): "${text.slice(0, 60)}"`).catch(() => {});
       } else {
         sendMessage("Queue is full (5 messages). Wait for the agent to finish.").catch(() => {});
@@ -770,17 +841,26 @@ if (isTTY) {
     }
 
     busy = true;
+    let liveMessage = null;
     try {
       log("telegram", `Incoming: ${text}`);
       const hasCloseIntent = /\bclose\b|\bsell\b|\bexit\b|\bwithdraw\b/i.test(text);
       const isDeployRequest = !hasCloseIntent && /\bdeploy\b|\bopen position\b|\blp into\b|\badd liquidity\b/i.test(text);
       const agentRole = isDeployRequest ? "SCREENER" : "GENERAL";
       const agentModel = agentRole === "SCREENER" ? config.llm.screeningModel : config.llm.generalModel;
-      const { content } = await agentLoop(text, config.llm.maxSteps, sessionHistory, agentRole, agentModel, null, { requireTool: true });
+      liveMessage = await createLiveMessage("🤖 Live Update", `Request: ${text.slice(0, 240)}`);
+      const { content } = await agentLoop(text, config.llm.maxSteps, sessionHistory, agentRole, agentModel, null, {
+        requireTool: true,
+        interactive: true,
+        onToolStart: async ({ name }) => { await liveMessage?.toolStart(name); },
+        onToolFinish: async ({ name, result, success }) => { await liveMessage?.toolFinish(name, result, success); },
+      });
       appendHistory(text, content);
-      await sendMessage(stripThink(content));
+      if (liveMessage) await liveMessage.finalize(stripThink(content));
+      else await sendMessage(stripThink(content));
     } catch (e) {
-      await sendMessage(`Error: ${e.message}`).catch(() => { });
+      if (liveMessage) await liveMessage.fail(e.message).catch(() => {});
+      else await sendMessage(`Error: ${e.message}`).catch(() => { });
     } finally {
       busy = false;
       rl.setPrompt(buildPrompt());
