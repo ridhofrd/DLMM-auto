@@ -844,14 +844,24 @@ if (isTTY) {
     let liveMessage = null;
     try {
       log("telegram", `Incoming: ${text}`);
+      const isScreenOnly = /^\/screen\b/i.test(text) || /\bscreen\s+only\b/i.test(text);
       const hasCloseIntent = /\bclose\b|\bsell\b|\bexit\b|\bwithdraw\b/i.test(text);
       const isDeployRequest = !hasCloseIntent && /\bdeploy\b|\bopen position\b|\blp into\b|\badd liquidity\b/i.test(text);
       const agentRole = isDeployRequest ? "SCREENER" : "GENERAL";
       const agentModel = agentRole === "SCREENER" ? config.llm.screeningModel : config.llm.generalModel;
       liveMessage = await createLiveMessage("🤖 Live Update", `Request: ${text.slice(0, 240)}`);
-      const { content } = await agentLoop(text, config.llm.maxSteps, sessionHistory, agentRole, agentModel, null, {
+      const goal = isScreenOnly
+        ? `SCREEN ONLY (NO DEPLOY)
+
+You must ONLY research/screen and return recommendations. Do NOT deploy, do NOT call deploy_position, do NOT claim/close/swap. Provide 1-3 best candidates with concise reasons and key metrics.
+
+User request: ${text}`
+        : text;
+
+      const { content } = await agentLoop(goal, config.llm.maxSteps, sessionHistory, agentRole, agentModel, null, {
         requireTool: true,
         interactive: true,
+        toolBlacklist: isScreenOnly ? ["deploy_position", "close_position", "claim_fees", "swap_token"] : [],
         onToolStart: async ({ name }) => { await liveMessage?.toolStart(name); },
         onToolFinish: async ({ name, result, success }) => { await liveMessage?.toolFinish(name, result, success); },
       });
