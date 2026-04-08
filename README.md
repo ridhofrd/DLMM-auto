@@ -53,8 +53,8 @@ Agents are powered via **OpenRouter** and can be swapped for any compatible mode
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/yunus-0x/meridian
-cd meridian
+git clone https://github.com/ridhofrd/DLMM-auto
+cd DLMM-auto
 npm install
 ```
 
