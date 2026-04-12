@@ -83,13 +83,8 @@ export const config = {
 
   // ─── Scheduling ─────────────────────────
   schedule: {
-<<<<<<< HEAD
     managementIntervalMin: u.managementIntervalMin ?? 99999,
     screeningIntervalMin: u.screeningIntervalMin ?? 30,
-=======
-    managementIntervalMin:  u.managementIntervalMin  ?? 99999,
-    screeningIntervalMin:   u.screeningIntervalMin   ?? 30,
->>>>>>> e394540755d0e3554095f7eacf11a26d5180eac5
     healthCheckIntervalMin: u.healthCheckIntervalMin ?? 60,
   },
 
@@ -139,6 +134,17 @@ export function computeDeployAmount(walletSol) {
  * in-memory config object. Called after threshold evolution so the next
  * agent cycle uses the evolved values without a restart.
  */
+
+export function getDynamicTakeProfitPct() {
+  const now = new Date();
+  const utc7Hour = (now.getUTCHours() + 7) % 24;
+
+  if (utc7Hour >= 20 || utc7Hour < 2) return 1.5;
+  if (utc7Hour >= 2 && utc7Hour < 8) return 1.0;
+  if (utc7Hour >= 8 && utc7Hour < 14) return 0.75;
+  return 0.5;
+}
+
 export function reloadScreeningThresholds() {
   if (!fs.existsSync(USER_CONFIG_PATH)) return;
   try {

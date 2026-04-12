@@ -6,7 +6,7 @@ import { log } from "./logger.js";
 import { getMyPositions, closePosition, getActiveBin } from "./tools/dlmm.js";
 import { getWalletBalances, swapToken } from "./tools/wallet.js";
 import { getTopCandidates } from "./tools/screening.js";
-import { config, reloadScreeningThresholds, computeDeployAmount } from "./config.js";
+import { config, reloadScreeningThresholds, computeDeployAmount, getDynamicTakeProfitPct } from "./config.js";
 import { evolveThresholds, getPerformanceSummary } from "./lessons.js";
 import { registerCronRestarter } from "./tools/executor.js";
 import { startPolling, stopPolling, sendMessage, sendHTML, sendLongPlainText, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
@@ -21,7 +21,7 @@ log("startup", "DLMM LP Agent starting...");
 log("startup", `Mode: ${process.env.DRY_RUN === "true" ? "DRY RUN" : "LIVE"}`);
 log("startup", `Model: ${process.env.LLM_MODEL || "hermes-3-405b"}`);
 
-const TP_PCT = config.management.takeProfitFeePct;
+// TP_PCT is now dynamic — use getDynamicTakeProfitPct() at call sites
 const DEPLOY = config.management.deployAmountSol;
 
 // ═══════════════════════════════════════════
@@ -193,9 +193,10 @@ export async function runManagementCycle({ silent = false } = {}) {
         actionMap.set(p.position, { action: "CLOSE", rule: 1, reason: "stop loss" });
         continue;
       }
-      // Rule 2: take profit
-      if (!pnlSuspect && p.pnl_pct != null && p.pnl_pct >= config.management.takeProfitFeePct) {
-        actionMap.set(p.position, { action: "CLOSE", rule: 2, reason: "take profit" });
+      // Rule 2: take profit (dynamic by UTC+7 hour)
+      const dynamicTpPct = getDynamicTakeProfitPct();
+      if (!pnlSuspect && p.pnl_pct != null && p.pnl_pct >= dynamicTpPct) {
+        actionMap.set(p.position, { action: "CLOSE", rule: 2, reason: `take profit (TP=${dynamicTpPct}%)` });
         continue;
       }
       // Rule 3: pumped far above range
@@ -623,7 +624,7 @@ Summarize the current portfolio health, total fees earned, and performance of al
     try {
       const result = await getMyPositions({ force: true, silent: true }).catch(() => null);
       if (!result?.positions?.length) return;
-      const tpThreshold = config.management.takeProfitFeePct;
+      const tpThreshold = getDynamicTakeProfitPct();
       for (const p of result.positions) {
         if (p.pnl_pct != null && tpThreshold != null && p.pnl_pct >= tpThreshold) {
           // Suspect PnL guard — skip extreme negatives that flip to huge positives (bad data)
@@ -997,29 +998,13 @@ if (isTTY) {
       const agentRole = isDeployRequest ? "SCREENER" : "GENERAL";
       const agentModel = agentRole === "SCREENER" ? config.llm.screeningModel : config.llm.generalModel;
       liveMessage = await createLiveMessage("🤖 Live Update", `Request: ${text.slice(0, 240)}`);
-<<<<<<< HEAD
-      const telegramDeployReport = `
-
-TELEGRAM — AFTER deploy_position (if you deploy): Your final reply MUST include the same extended report as autonomous screening:
-- Header with pool, amounts, strategy, active bin / range / downside buffer where known
-- STRATEGY & RANGE (extended): Strategy (why bid_ask vs spot), Bins (bins_below/bins_above vs volatility & bin_step), Price risk, Tradeoffs, Could have done differently
-- Keep MARKET/AUDIT/RISK/WHY THIS WON scannable; do not skip STRATEGY & RANGE.`;
-
-=======
->>>>>>> e394540755d0e3554095f7eacf11a26d5180eac5
       const goal = isScreenOnly
         ? `SCREEN ONLY (NO DEPLOY)
 
 You must ONLY research/screen and return recommendations. Do NOT deploy, do NOT call deploy_position, do NOT claim/close/swap. Provide 1-3 best candidates with concise reasons and key metrics.
 
 User request: ${text}`
-<<<<<<< HEAD
-        : isDeployRequest
-          ? `${text}${telegramDeployReport}`
-          : text;
-=======
         : text;
->>>>>>> e394540755d0e3554095f7eacf11a26d5180eac5
 
       const { content } = await agentLoop(goal, config.llm.maxSteps, sessionHistory, agentRole, agentModel, null, {
         requireTool: true,
