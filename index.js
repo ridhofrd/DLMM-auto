@@ -997,6 +997,7 @@ if (isTTY) {
       const agentRole = isDeployRequest ? "SCREENER" : "GENERAL";
       const agentModel = agentRole === "SCREENER" ? config.llm.screeningModel : config.llm.generalModel;
       liveMessage = await createLiveMessage("🤖 Live Update", `Request: ${text.slice(0, 240)}`);
+<<<<<<< HEAD
       const telegramDeployReport = `
 
 TELEGRAM — AFTER deploy_position (if you deploy): Your final reply MUST include the same extended report as autonomous screening:
@@ -1004,15 +1005,21 @@ TELEGRAM — AFTER deploy_position (if you deploy): Your final reply MUST includ
 - STRATEGY & RANGE (extended): Strategy (why bid_ask vs spot), Bins (bins_below/bins_above vs volatility & bin_step), Price risk, Tradeoffs, Could have done differently
 - Keep MARKET/AUDIT/RISK/WHY THIS WON scannable; do not skip STRATEGY & RANGE.`;
 
+=======
+>>>>>>> e394540755d0e3554095f7eacf11a26d5180eac5
       const goal = isScreenOnly
         ? `SCREEN ONLY (NO DEPLOY)
 
 You must ONLY research/screen and return recommendations. Do NOT deploy, do NOT call deploy_position, do NOT claim/close/swap. Provide 1-3 best candidates with concise reasons and key metrics.
 
 User request: ${text}`
+<<<<<<< HEAD
         : isDeployRequest
           ? `${text}${telegramDeployReport}`
           : text;
+=======
+        : text;
+>>>>>>> e394540755d0e3554095f7eacf11a26d5180eac5
 
       const { content } = await agentLoop(goal, config.llm.maxSteps, sessionHistory, agentRole, agentModel, null, {
         requireTool: true,
