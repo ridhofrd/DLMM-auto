@@ -101,21 +101,53 @@ async function postTelegram(method, body) {
   }
 }
 
+const TELEGRAM_MAX_MESSAGE = 4096;
+
+/** Split plain text into Telegram-safe chunks (prefer paragraph breaks). */
+export function splitTelegramPlainChunks(text, maxLen = TELEGRAM_MAX_MESSAGE) {
+  const s = String(text ?? "");
+  if (s.length <= maxLen) return s ? [s] : [];
+  const chunks = [];
+  let rest = s;
+  while (rest.length > 0) {
+    if (rest.length <= maxLen) {
+      chunks.push(rest);
+      break;
+    }
+    let cut = rest.lastIndexOf("\n\n", maxLen);
+    if (cut < maxLen * 0.5) cut = rest.lastIndexOf("\n", maxLen);
+    if (cut < maxLen * 0.5) cut = maxLen;
+    if (cut <= 0) cut = maxLen;
+    chunks.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  return chunks.filter(Boolean);
+}
+
+/** Send text as one or more messages (avoids 4096 truncation). */
+export async function sendLongPlainText(text) {
+  if (!TOKEN || !chatId) return;
+  const parts = splitTelegramPlainChunks(text);
+  for (let i = 0; i < parts.length; i++) {
+    await postTelegram("sendMessage", { text: parts[i] });
+  }
+}
+
 export async function sendMessage(text) {
   if (!TOKEN || !chatId) return;
-  return postTelegram("sendMessage", { text: String(text).slice(0, 4096) });
+  return postTelegram("sendMessage", { text: String(text).slice(0, TELEGRAM_MAX_MESSAGE) });
 }
 
 export async function sendHTML(html) {
   if (!TOKEN || !chatId) return;
-  return postTelegram("sendMessage", { text: html.slice(0, 4096), parse_mode: "HTML" });
+  return postTelegram("sendMessage", { text: html.slice(0, TELEGRAM_MAX_MESSAGE), parse_mode: "HTML" });
 }
 
 export async function editMessage(text, messageId) {
   if (!TOKEN || !chatId || !messageId) return null;
   return postTelegram("editMessageText", {
     message_id: messageId,
-    text: String(text).slice(0, 4096),
+    text: String(text).slice(0, TELEGRAM_MAX_MESSAGE),
   });
 }
 
@@ -221,7 +253,7 @@ export async function createLiveMessage(title, intro = "Starting...") {
     if (state.intro) sections.push(state.intro);
     if (state.toolLines.length > 0) sections.push(state.toolLines.join("\n"));
     if (state.footer) sections.push(state.footer);
-    return sections.join("\n\n").slice(0, 4096);
+    return sections.join("\n\n").slice(0, TELEGRAM_MAX_MESSAGE);
   }
 
   async function flushNow() {
@@ -277,8 +309,20 @@ export async function createLiveMessage(title, intro = "Starting...") {
         state.flushTimer = null;
       }
       if (state.flushPromise) await state.flushPromise;
-      state.footer = finalText;
-      await flushNow();
+      const headerParts = [state.title, state.intro, state.toolLines.length > 0 ? state.toolLines.join("\n") : null].filter(Boolean);
+      const header = headerParts.join("\n\n");
+      const body = finalText ? String(finalText) : "";
+      const combined = body ? `${header}\n\n${body}` : header;
+      if (combined.length <= TELEGRAM_MAX_MESSAGE) {
+        state.footer = finalText;
+        await flushNow();
+      } else {
+        state.footer =
+          "✅ Done — full report is too long for one message. Continued below ⬇️";
+        await flushNow();
+        const overflow = body.trim() ? body : combined;
+        await sendLongPlainText(overflow);
+      }
       _liveMessageDepth = Math.max(0, _liveMessageDepth - 1);
       typing.stop();
     },
@@ -335,7 +379,25 @@ export function stopPolling() {
 }
 
 // ─── Notification helpers ────────────────────────────────────────
-export async function notifyDeploy({ pair, amountSol, position, tx, priceRange, binStep, baseFee }) {
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export async function notifyDeploy({
+  pair,
+  amountSol,
+  position,
+  tx,
+  priceRange,
+  binStep,
+  baseFee,
+  strategy,
+  binsBelow,
+  binsAbove,
+}) {
   if (hasActiveLiveMessage()) return;
   const priceStr = priceRange
     ? `Price range: ${priceRange.min < 0.0001 ? priceRange.min.toExponential(3) : priceRange.min.toFixed(6)} – ${priceRange.max < 0.0001 ? priceRange.max.toExponential(3) : priceRange.max.toFixed(6)}\n`
@@ -343,9 +405,16 @@ export async function notifyDeploy({ pair, amountSol, position, tx, priceRange, 
   const poolStr = (binStep || baseFee)
     ? `Bin step: ${binStep ?? "?"}  |  Base fee: ${baseFee != null ? baseFee + "%" : "?"}\n`
     : "";
+  const stratStr = strategy ? `Strategy: <b>${escapeHtml(strategy)}</b>\n` : "";
+  const binsStr =
+    binsBelow != null || binsAbove != null
+      ? `Bins: below <code>${binsBelow ?? 0}</code> / above <code>${binsAbove ?? 0}</code>\n`
+      : "";
   await sendHTML(
-    `✅ <b>Deployed</b> ${pair}\n` +
-    `Amount: ${amountSol} SOL\n` +
+    `✅ <b>Deployed</b> ${escapeHtml(pair)}\n` +
+    stratStr +
+    binsStr +
+    `Amount: ${escapeHtml(String(amountSol))} SOL\n` +
     priceStr +
     poolStr +
     `Position: <code>${position?.slice(0, 8)}...</code>\n` +

@@ -137,7 +137,14 @@ function isSystemRoleError(error) {
  * @returns {string} - The agent's final text response
  */
 export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHistory = [], agentType = "GENERAL", model = null, maxOutputTokens = null, options = {}) {
-  const { requireTool = false, interactive = false, onToolStart = null, onToolFinish = null } = options;
+  const {
+    requireTool = false,
+    interactive = false,
+    onToolStart = null,
+    onToolFinish = null,
+    toolBlacklist = [],
+    toolsOverride = null,
+  } = options;
   // Build dynamic system prompt with current portfolio state
   const [portfolio, positions] = await Promise.all([getWalletBalances(), getMyPositions()]);
   const stateSummary = getStateSummary();
@@ -173,12 +180,20 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
       const ACTION_INTENTS = /\b(deploy|open|add liquidity|close|exit|withdraw|claim|swap|block|unblock)\b/i;
       const toolChoice = (step === 0 && (ACTION_INTENTS.test(goal) || mustUseRealTool)) ? "required" : "auto";
 
+      // Toolset can be customized per-run (e.g. Telegram "screen only" mode)
+      const blacklist = new Set(Array.isArray(toolBlacklist) ? toolBlacklist : []);
+      const toolsForRun = (() => {
+        const base = Array.isArray(toolsOverride) ? toolsOverride : getToolsForRole(agentType, goal);
+        if (blacklist.size === 0) return base;
+        return base.filter(t => !blacklist.has(t.function?.name));
+      })();
+
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           response = await client.chat.completions.create({
             model: usedModel,
             messages,
-            tools: getToolsForRole(agentType, goal),
+            tools: toolsForRun,
             tool_choice: toolChoice,
             temperature: config.llm.temperature,
             max_tokens: maxOutputTokens ?? config.llm.maxTokens,

@@ -31,10 +31,10 @@ You have access to these CLI commands (always use `node cli.js <cmd>`):
 - Unclaimed fees > $5 USD
 
 **Close position when:**
-- **OOR downside + non-profitable (PnL < -1%)** → close IMMEDIATELY to stop lost. Don't wait for the OOR timer — the pump happened, close the lost.
-- **OOR upside + profitable (PnL > 10%)** → close IMMEDIATELY to lock gains. Don't wait for the OOR timer — the pump happened, take the win.
-- OOR downside for > 2 minutes with no volume recovery
-- PnL < -1% with no volume recovery
+- **OOR downside + non-profitable (PnL < -0.5%)** → close IMMEDIATELY to stop lost. Don't wait for the OOR timer — the pump happened, close the lost.
+- **OOR upside + profitable (PnL > 1%)** → close IMMEDIATELY to lock gains. Don't wait for the OOR timer — the pump happened, take the win.
+- OOR downside for > 1 minutes with no volume recovery
+- PnL < -0.5% with no volume recovery
 - Take profit: total return (fees + PnL) >= 10% of deployed capital
 
 
