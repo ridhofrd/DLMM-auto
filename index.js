@@ -16,6 +16,9 @@ import { getActiveStrategy } from "./strategy-library.js";
 import { recordPositionSnapshot, recallForPool, addPoolNote } from "./pool-memory.js";
 import { checkSmartWalletsOnPool } from "./smart-wallets.js";
 import { getTokenNarrative, getTokenInfo } from "./tools/token.js";
+import { startUIServer, commandListeners } from "./ui-server.js";
+
+startUIServer();
 
 log("startup", "DLMM LP Agent starting...");
 log("startup", `Mode: ${process.env.DRY_RUN === "true" ? "DRY RUN" : "LIVE"}`);
@@ -1055,6 +1058,10 @@ Commands:
 `);
 
   rl.prompt();
+
+  commandListeners.push((cmd) => {
+    rl.emit("line", cmd);
+  });
 
   rl.on("line", async (line) => {
     const input = line.trim();
