@@ -19,6 +19,7 @@ strategy-library.json
 
 # Logs
 logs/
+real_logs/
 
 # OS
 .DS_Store

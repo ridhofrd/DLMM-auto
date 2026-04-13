@@ -43,11 +43,18 @@ export async function discoverPools({
     `&filter_by=${encodeURIComponent(filters)}` +
     `&timeframe=${s.timeframe}` +
     `&category=${s.category}`;
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://app.meteora.ag",
+    "Referer": "https://app.meteora.ag/"
+  };
 
-  const res = await fetch(url);
-
+  const res = await fetch(url, { headers });
   if (!res.ok) {
-    throw new Error(`Pool Discovery API error: ${res.status} ${res.statusText}`);
+    let errText = "";
+    try { errText = await res.text(); } catch (e) { }
+    throw new Error(`Pool Discovery API error: ${res.status} ${res.statusText} | Response: ${errText} | URL: ${url}`);
   }
 
   const data = await res.json();
@@ -152,10 +159,10 @@ export async function getTopCandidates({ limit = 10 } = {}) {
         ]);
 
         const mintShort = p.base.mint.slice(0, 8);
-        if (adv.status !== "fulfilled")      log("okx", `advanced-info unavailable for ${p.name} (${mintShort})`);
-        if (price.status !== "fulfilled")    log("okx", `price-info unavailable for ${p.name} (${mintShort})`);
+        if (adv.status !== "fulfilled") log("okx", `advanced-info unavailable for ${p.name} (${mintShort})`);
+        if (price.status !== "fulfilled") log("okx", `price-info unavailable for ${p.name} (${mintShort})`);
         if (clusters.status !== "fulfilled") log("okx", `cluster-list unavailable for ${p.name} (${mintShort})`);
-        if (risk.status !== "fulfilled")     log("okx", `risk-check unavailable for ${p.name} (${mintShort})`);
+        if (risk.status !== "fulfilled") log("okx", `risk-check unavailable for ${p.name} (${mintShort})`);
 
         return {
           adv: adv.status === "fulfilled" ? adv.value : null,
@@ -170,28 +177,28 @@ export async function getTopCandidates({ limit = 10 } = {}) {
       if (r.status !== "fulfilled") continue;
       const { adv, price, clusters, risk } = r.value;
       if (adv) {
-        eligible[i].risk_level      = adv.risk_level;
-        eligible[i].bundle_pct      = adv.bundle_pct;
-        eligible[i].sniper_pct      = adv.sniper_pct;
-        eligible[i].suspicious_pct  = adv.suspicious_pct;
+        eligible[i].risk_level = adv.risk_level;
+        eligible[i].bundle_pct = adv.bundle_pct;
+        eligible[i].sniper_pct = adv.sniper_pct;
+        eligible[i].suspicious_pct = adv.suspicious_pct;
         eligible[i].smart_money_buy = adv.smart_money_buy;
-        eligible[i].dev_sold_all    = adv.dev_sold_all;
-        eligible[i].dex_boost       = adv.dex_boost;
+        eligible[i].dev_sold_all = adv.dev_sold_all;
+        eligible[i].dex_boost = adv.dex_boost;
         eligible[i].dex_screener_paid = adv.dex_screener_paid;
         if (adv.creator && !eligible[i].dev) eligible[i].dev = adv.creator;
       }
       if (risk) {
         eligible[i].is_rugpull = risk.is_rugpull;
-        eligible[i].is_wash    = risk.is_wash;
+        eligible[i].is_wash = risk.is_wash;
       }
       if (price) {
         eligible[i].price_vs_ath_pct = price.price_vs_ath_pct;
-        eligible[i].ath              = price.ath;
+        eligible[i].ath = price.ath;
       }
       if (clusters?.length) {
         // Surface KOL presence and top cluster trend for LLM
-        eligible[i].kol_in_clusters      = clusters.some((c) => c.has_kol);
-        eligible[i].top_cluster_trend    = clusters[0]?.trend ?? null;      // buy|sell|neutral
+        eligible[i].kol_in_clusters = clusters.some((c) => c.has_kol);
+        eligible[i].top_cluster_trend = clusters[0]?.trend ?? null;      // buy|sell|neutral
         eligible[i].top_cluster_hold_pct = clusters[0]?.holding_pct ?? null;
       }
     }
@@ -246,8 +253,14 @@ export async function getPoolDetail({ pool_address, timeframe = "5m" }) {
     `page_size=1` +
     `&filter_by=${encodeURIComponent(`pool_address=${pool_address}`)}` +
     `&timeframe=${timeframe}`;
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://app.meteora.ag",
+    "Referer": "https://app.meteora.ag/"
+  };
 
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
 
   if (!res.ok) {
     throw new Error(`Pool detail API error: ${res.status} ${res.statusText}`);
