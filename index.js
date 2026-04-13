@@ -418,23 +418,33 @@ export async function runScreeningCycle({ silent = false } = {}) {
     }
 
     // Hard filters after token recon — block launchpads and excessive Jupiter bot holders
+    let droppedByLaunchpad = 0;
+    let droppedByBots = 0;
     const passing = allCandidates.filter(({ pool, ti }) => {
       const launchpad = ti?.launchpad ?? null;
       if (launchpad && config.screening.blockedLaunchpads.includes(launchpad)) {
         log("screening", `Skipping ${pool.name} — blocked launchpad (${launchpad})`);
+        droppedByLaunchpad++;
         return false;
       }
       const botPct = ti?.audit?.bot_holders_pct;
       const maxBotHoldersPct = config.screening.maxBotHoldersPct;
       if (botPct != null && maxBotHoldersPct != null && botPct > maxBotHoldersPct) {
         log("screening", `Bot-holder filter: dropped ${pool.name} — bots ${botPct}% > ${maxBotHoldersPct}%`);
+        droppedByBots++;
         return false;
       }
       return true;
     });
 
     if (passing.length === 0) {
-      screenReport = `No candidates available (all blocked by launchpad filter).`;
+      const reasons = [];
+      if (allCandidates.length === 0) reasons.push("no candidates from discovery API");
+      if (droppedByLaunchpad > 0) reasons.push(`${droppedByLaunchpad} blocked by launchpad`);
+      if (droppedByBots > 0) reasons.push(`${droppedByBots} blocked by bot-holders >${config.screening.maxBotHoldersPct}%`);
+      if (reasons.length === 0) reasons.push("all filtered by upstream screening");
+      screenReport = `No candidates available (${reasons.join(", ")}).`;
+      log("screening", screenReport);
       return screenReport;
     }
 
