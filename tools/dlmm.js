@@ -672,8 +672,17 @@ export async function closePosition({ position_address, reason }) {
       });
 
       for (const tx of Array.isArray(closeTx) ? closeTx : [closeTx]) {
-        const txHash = await sendAndConfirmTransaction(getConnection(), tx, [wallet]);
-        closeTxHashes.push(txHash);
+        try {
+          const txHash = await sendAndConfirmTransaction(getConnection(), tx, [wallet]);
+          closeTxHashes.push(txHash);
+        } catch (e) {
+          const errStr = e.message + " " + JSON.stringify(e);
+          if (errStr.includes("AccountOwnedByWrongProgram") || errStr.includes("0xbbf") || errStr.includes("3007")) {
+            log("close", "Position account already closed (wrong program owner / 0xbbf). Treating as success.");
+          } else {
+            throw e;
+          }
+        }
       }
     } else {
       log("close", `Step 2: Position is empty, forcing close account`);
@@ -681,8 +690,17 @@ export async function closePosition({ position_address, reason }) {
         owner: wallet.publicKey,
         position: { publicKey: positionPubKey },
       });
-      const txHash = await sendAndConfirmTransaction(getConnection(), closeTx, [wallet]);
-      closeTxHashes.push(txHash);
+      try {
+        const txHash = await sendAndConfirmTransaction(getConnection(), closeTx, [wallet]);
+        closeTxHashes.push(txHash);
+      } catch (e) {
+        const errStr = e.message + " " + JSON.stringify(e);
+        if (errStr.includes("AccountOwnedByWrongProgram") || errStr.includes("0xbbf") || errStr.includes("3007")) {
+          log("close", "Position account already closed (wrong program owner / 0xbbf). Treating as success.");
+        } else {
+          throw e;
+        }
+      }
     }
     const txHashes = [...claimTxHashes, ...closeTxHashes];
     log("close", `Step 2 OK (close only): ${closeTxHashes.join(", ") || "none"}`);
