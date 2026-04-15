@@ -58,12 +58,14 @@ export async function getTokenInfo({ query }) {
     stats_24h_net_buyers: t.stats24h ? t.stats24h.numNetBuyers : null, // keep only net buyer direction
   }));
 
-  // Enrich first result with OKX smart money + risk data (public endpoint, no key needed)
+  // Enrich first result with OKX + GMGN data
   if (results[0]?.mint) {
     const { getAdvancedInfo, getClusterList } = await import("./okx.js");
-    const [adv, clusters] = await Promise.all([
+    const { getGMGNTokenAnalysis } = await import("./gmgn.js");
+    const [adv, clusters, gmgn] = await Promise.all([
       getAdvancedInfo(results[0].mint).catch(() => null),
       getClusterList(results[0].mint).catch(() => []),
+      getGMGNTokenAnalysis(results[0].mint).catch(() => null),
     ]);
     if (adv) {
       results[0].risk_level      = adv.risk_level;
@@ -78,6 +80,10 @@ export async function getTokenInfo({ query }) {
       results[0].kol_in_clusters   = clusters.some((c) => c.has_kol);
       results[0].top_cluster_trend = clusters[0]?.trend ?? null;
       results[0].clusters          = clusters;
+    }
+    if (gmgn) {
+      results[0].gmgn_security = gmgn.security;
+      results[0].gmgn_stats    = gmgn.stats;
     }
   }
 
@@ -124,11 +130,13 @@ export async function getTokenHolders({ mint, limit = 20 }) {
   const realHolders = mapped.filter((h) => !h.is_pool);
   const top10Pct = realHolders.slice(0, 10).reduce((s, h) => s + (Number(h.pct) || 0), 0);
 
-  // ─── Bundle / Cluster Analysis (OKX) ─────────────────────────
+  // ─── Bundle / Cluster / GMGN Analysis ─────────────────────────
   const { getAdvancedInfo, getClusterList } = await import("./okx.js");
-  const [advancedData, clusterList] = await Promise.all([
+  const { getGMGNTokenAnalysis } = await import("./gmgn.js");
+  const [advancedData, clusterList, gmgnData] = await Promise.all([
     getAdvancedInfo(mint).catch(() => null),
     getClusterList(mint).catch(() => []),
+    getGMGNTokenAnalysis(mint).catch(() => null),
   ]);
 
   // ─── Smart Wallet / KOL Cross-reference ──────────────────────
@@ -203,6 +211,8 @@ export async function getTokenHolders({ mint, limit = 20 }) {
     sniper_pct:     advancedData?.sniper_pct     ?? null,
     suspicious_pct: advancedData?.suspicious_pct ?? null,
     new_wallet_pct: advancedData?.new_wallet_pct ?? null,  // high = rug signal
+    gmgn_security:  gmgnData?.security ?? null,
+    gmgn_stats:     gmgnData?.stats    ?? null,
     smart_wallets_holding: smartWalletsHolding,
     holders: mapped,
   };

@@ -549,6 +549,27 @@ BAD narrative signals (caution or skip):
   {
     type: "function",
     function: {
+      name: "get_gmgn_token_analysis",
+      description: `Get advanced token analysis from GMGN.ai.
+Provides superior "smart money" tracking, insider detection, and deep security audits for Solana tokens.
+Use this to cross-reference OKX/Jupiter data or to perform deep research on a promising candidate.
+
+Returns:
+- Security: rug risk, honey pot, liquidity lock, ownership status, tax rates.
+- Stats: Smart money count, insider activity, whale/sniper counts, dev holdings.`,
+      parameters: {
+        type: "object",
+        properties: {
+          mint: { type: "string", description: "Token mint address (base58)" }
+        },
+        required: ["mint"]
+      }
+    }
+  },
+
+  {
+    type: "function",
+    function: {
       name: "search_pools",
       description: `Search for DLMM pools by token symbol, ticker, or contract address (CA).
 Use this when the user asks to deploy into a specific token or pool by name/CA,

@@ -15,6 +15,7 @@ if (u.walletKey) process.env.WALLET_PRIVATE_KEY ||= u.walletKey;
 if (u.llmModel) process.env.LLM_MODEL ||= u.llmModel;
 if (u.llmBaseUrl) process.env.LLM_BASE_URL ||= u.llmBaseUrl;
 if (u.llmApiKey) process.env.LLM_API_KEY ||= u.llmApiKey;
+if (u.gmgnApiKey) process.env.GMGN_API_KEY ||= u.gmgnApiKey;
 if (u.dryRun !== undefined) process.env.DRY_RUN ||= String(u.dryRun);
 
 export const config = {

@@ -148,14 +148,16 @@ export async function getTopCandidates({ limit = 10 } = {}) {
   // Enrich with OKX data — advanced info (risk/bundle/sniper) + ATH price (no API key required)
   if (eligible.length > 0) {
     const { getAdvancedInfo, getPriceInfo, getClusterList, getRiskFlags } = await import("./okx.js");
+    const { getGMGNTokenAnalysis } = await import("./gmgn.js");
     const okxResults = await Promise.allSettled(
       eligible.map(async (p) => {
-        if (!p.base?.mint) return { adv: null, price: null, clusters: [], risk: null };
-        const [adv, price, clusters, risk] = await Promise.allSettled([
+        if (!p.base?.mint) return { adv: null, price: null, clusters: [], risk: null, gmgn: null };
+        const [adv, price, clusters, risk, gmgn] = await Promise.allSettled([
           getAdvancedInfo(p.base.mint),
           getPriceInfo(p.base.mint),
           getClusterList(p.base.mint),
           getRiskFlags(p.base.mint),
+          getGMGNTokenAnalysis(p.base.mint),
         ]);
 
         const mintShort = p.base.mint.slice(0, 8);
@@ -169,13 +171,14 @@ export async function getTopCandidates({ limit = 10 } = {}) {
           price: price.status === "fulfilled" ? price.value : null,
           clusters: clusters.status === "fulfilled" ? clusters.value : [],
           risk: risk.status === "fulfilled" ? risk.value : null,
+          gmgn: gmgn.status === "fulfilled" ? gmgn.value : null,
         };
       })
     );
     for (let i = 0; i < eligible.length; i++) {
       const r = okxResults[i];
       if (r.status !== "fulfilled") continue;
-      const { adv, price, clusters, risk } = r.value;
+      const { adv, price, clusters, risk, gmgn } = r.value;
       if (adv) {
         eligible[i].risk_level = adv.risk_level;
         eligible[i].bundle_pct = adv.bundle_pct;
@@ -200,6 +203,10 @@ export async function getTopCandidates({ limit = 10 } = {}) {
         eligible[i].kol_in_clusters = clusters.some((c) => c.has_kol);
         eligible[i].top_cluster_trend = clusters[0]?.trend ?? null;      // buy|sell|neutral
         eligible[i].top_cluster_hold_pct = clusters[0]?.holding_pct ?? null;
+      }
+      if (gmgn) {
+        eligible[i].gmgn_security = gmgn.security;
+        eligible[i].gmgn_stats    = gmgn.stats;
       }
     }
     // Wash trading hard filter — fake volume = misleading fee yield
