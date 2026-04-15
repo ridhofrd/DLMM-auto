@@ -110,6 +110,12 @@ Returns token audit, mcap, launchpad, price stats, fee data.
 Output: { results: [{mint, symbol, mcap, launchpad, audit, stats_1h, global_fees_sol, ...}] }
 \`\`\`
 
+### meridian gmgn-report --mint <addr>
+Returns a human-readable security and alpha report (Smart Money, Risk Score, etc.).
+\`\`\`
+Output: Beautifully formatted ASCII report
+\`\`\`
+
 ### meridian token-holders --mint <addr> [--limit 20]
 Returns holder distribution, bot %, top holder concentration.
 \`\`\`
@@ -370,6 +376,17 @@ switch (subcommand) {
     if (!query) die("Usage: meridian token-info --query <mint_or_symbol>");
     const { getTokenInfo } = await import("./tools/token.js");
     out(await getTokenInfo({ query }));
+    break;
+  }
+
+  // ── gmgn-report ──────────────────────────────────────────────────
+  case "gmgn-report": {
+    const mint = flags.mint || flags.query || argv.find((a, i) => !a.startsWith("-") && i > 0 && a !== "gmgn-report");
+    if (!mint) die("Usage: meridian gmgn-report --mint <addr>");
+    const { getGMGNTokenAnalysis, formatGMGNReport } = await import("./tools/gmgn.js");
+    process.stderr.write(`[meridian] Fetching GMGN intelligence for ${mint}...\n`);
+    const analysis = await getGMGNTokenAnalysis(mint);
+    process.stdout.write("\n" + formatGMGNReport(mint, analysis) + "\n");
     break;
   }
 

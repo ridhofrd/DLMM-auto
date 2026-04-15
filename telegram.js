@@ -397,6 +397,8 @@ export async function notifyDeploy({
   strategy,
   binsBelow,
   binsAbove,
+  gmgn_risk,
+  gmgn_sm,
 }) {
   if (hasActiveLiveMessage()) return;
   const priceStr = priceRange
@@ -410,6 +412,13 @@ export async function notifyDeploy({
     binsBelow != null || binsAbove != null
       ? `Bins: below <code>${binsBelow ?? 0}</code> / above <code>${binsAbove ?? 0}</code>\n`
       : "";
+
+  const gmgnStr = (gmgn_risk || gmgn_sm)
+    ? `\n🛡️ <b>GMGN Intelligence:</b>\n` +
+      (gmgn_risk ? `Risk: ${gmgn_risk === 'high' ? '🔴 HIGH' : gmgn_risk === 'medium' ? '🟡 MED' : '🟢 SAFE'}\n` : "") +
+      (gmgn_sm != null ? `Smart Money: 🚀 ${gmgn_sm} wallets\n` : "")
+    : "";
+
   await sendHTML(
     `✅ <b>Deployed</b> ${escapeHtml(pair)}\n` +
     stratStr +
@@ -417,7 +426,8 @@ export async function notifyDeploy({
     `Amount: ${escapeHtml(String(amountSol))} SOL\n` +
     priceStr +
     poolStr +
-    `Position: <code>${position?.slice(0, 8)}...</code>\n` +
+    gmgnStr +
+    `\nPosition: <code>${position?.slice(0, 8)}...</code>\n` +
     `Tx: <code>${tx?.slice(0, 16)}...</code>`
   );
 }

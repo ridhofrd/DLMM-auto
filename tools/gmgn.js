@@ -100,3 +100,45 @@ export async function getGMGNTokenAnalysis(mint) {
     klines,
   };
 }
+
+/**
+ * Formats a GMGN analysis object into a beautiful ASCII/Text report.
+ */
+export function formatGMGNReport(mint, data) {
+  if (!data || (!data.security && !data.stats)) {
+    return `❌ No GMGN data available for ${mint}`;
+  }
+
+  const s = data.security || {};
+  const st = data.stats || {};
+
+  const honeypot = s.is_honeypot ? "🚫 YES" : "✅ No";
+  const renounced = s.ownership_renounced ? "✅ Yes" : "⚠️ No";
+  const locked = s.liquidity_locked ? "✅ Yes" : "⚠️ No";
+  const riskColor = s.risk_level === "high" ? "🔴" : s.risk_level === "medium" ? "🟡" : "🟢";
+
+  const report = [
+    `💎 GMGN Token Report: ${mint}`,
+    `─── Security ──────────────────────────────────────`,
+    `Honeypot:      ${honeypot}`,
+    `Renounced:     ${renounced}`,
+    `Liq Locked:    ${locked}`,
+    `Buy/Sell Tax:  ${s.buy_tax || 0}% / ${s.sell_tax || 0}%`,
+    `Risk Score:    ${riskColor} ${s.risk_level?.toUpperCase() || "UNKNOWN"}`,
+    ``,
+    `─── Alpha Signals ─────────────────────────────────`,
+    `Smart Money:   🚀 ${st.smart_money_count || 0} wallets`,
+    `Whales:        🐳 ${st.whale_count || 0} wallets`,
+    `Insiders:      🎩 ${st.insider_count || 0} wallets`,
+    `Snipers:       🎯 ${st.sniper_count || 0} wallets`,
+    `Dev Holding:   ${st.dev_holding_pct != null ? `${st.dev_holding_pct}%` : "unknown"}`,
+    ``,
+    `─── Verdict ───────────────────────────────────────`,
+    s.is_honeypot ? "❌ DEADLY: This token is a honeypot." :
+    s.risk_level === "high" ? "⚠️ DANGEROUS: High risk of rugpull." :
+    st.smart_money_count > 10 ? "🟢 BULLISH: Significant smart money conviction." :
+    "🟡 NEUTRAL: Clean security but low smart money interest."
+  ];
+
+  return report.join("\n");
+}

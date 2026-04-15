@@ -353,7 +353,7 @@ export async function getPositionPnl({ pool_address, position_address }) {
 }
 
 // ─── Get My Positions ──────────────────────────────────────────
-export async function getMyPositions({ force = false, silent = false } = {}) {
+export async function getMyPositions({ force = false, silent = false, enrich_gmgn = false } = {}) {
   if (!force && _positionsCache && Date.now() - _positionsCacheAt < POSITIONS_CACHE_TTL) {
     return _positionsCache;
   }
@@ -462,6 +462,18 @@ export async function getMyPositions({ force = false, silent = false } = {}) {
             minutes_out_of_range: minutesOutOfRange(positionAddress),
             instruction: tracked?.instruction ?? null,
           });
+
+          // Enrich with GMGN if requested
+          if (enrich_gmgn) {
+            try {
+              const { getGMGNTokenAnalysis } = await import("./gmgn.js");
+              const gmgn = await getGMGNTokenAnalysis(pool.tokenXMint);
+              if (gmgn) {
+                positions[positions.length - 1].gmgn_security = gmgn.security;
+                positions[positions.length - 1].gmgn_stats = gmgn.stats;
+              }
+            } catch (e) { /* ignore enrichment errors */ }
+          }
         }
       }
 

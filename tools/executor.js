@@ -297,6 +297,23 @@ export async function executeTool(name, args) {
       if (name === "swap_token" && result.tx) {
         notifySwap({ inputSymbol: args.input_mint?.slice(0, 8), outputSymbol: args.output_mint === "So11111111111111111111111111111111111111112" || args.output_mint === "SOL" ? "SOL" : args.output_mint?.slice(0, 8), amountIn: result.amount_in, amountOut: result.amount_out, tx: result.tx }).catch(() => {});
       } else if (name === "deploy_position") {
+        // Fetch GMGN for notification if not provided
+        let gmgn_risk = null, gmgn_sm = null;
+        try {
+          const { getGMGNTokenAnalysis } = await import("./gmgn.js");
+          const poolAddr = result.pool || args.pool_address;
+          // In DLMM, tokenX is usually the base token. We need its mint.
+          const { DLMM } = await import("@meteora-ag/dlmm").catch(() => ({}));
+          const connection = new (await import("@solana/web3.js")).Connection(process.env.RPC_URL);
+          const pool = await DLMM?.create(connection, new (await import("@solana/web3.js")).PublicKey(poolAddr)).catch(() => null);
+          const mint = pool?.lbPair?.tokenXMint?.toString();
+          if (mint) {
+             const gmgn = await getGMGNTokenAnalysis(mint);
+             gmgn_risk = gmgn.security?.risk_level;
+             gmgn_sm = gmgn.stats?.smart_money_count;
+          }
+        } catch (e) { /* ignore */ }
+
         notifyDeploy({
           pair: result.pool_name || args.pool_name || args.pool_address?.slice(0, 8),
           amountSol: args.amount_y ?? args.amount_sol ?? 0,
@@ -308,6 +325,8 @@ export async function executeTool(name, args) {
           strategy: result.strategy ?? args.strategy,
           binsBelow: result.bins_below ?? args.bins_below,
           binsAbove: result.bins_above ?? args.bins_above,
+          gmgn_risk,
+          gmgn_sm,
         }).catch(() => {});
       } else if (name === "close_position") {
         notifyClose({ pair: result.pool_name || args.position_address?.slice(0, 8), pnlUsd: result.pnl_usd ?? 0, pnlPct: result.pnl_pct ?? 0 }).catch(() => {});

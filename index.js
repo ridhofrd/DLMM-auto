@@ -803,14 +803,17 @@ function formatCandidates(candidates) {
   const lines = candidates.map((p, i) => {
     const name = (p.name || "unknown").padEnd(20);
     const ftvl = `${p.fee_active_tvl_ratio ?? p.fee_tvl_ratio}%`.padStart(8);
-    const vol = `$${((p.volume_window || 0) / 1000).toFixed(1)}k`.padStart(8);
-    const active = `${p.active_pct}%`.padStart(6);
+    // const vol = `$${((p.volume_window || 0) / 1000).toFixed(1)}k`.padStart(8);
     const org = String(p.organic_score).padStart(4);
-    return `  [${i + 1}]  ${name}  fee/aTVL:${ftvl}  vol:${vol}  in-range:${active}  organic:${org}`;
+
+    const sm = p.gmgn_stats?.smart_money_count != null ? `🚀${p.gmgn_stats.smart_money_count}` : "🚀?";
+    const safe = p.gmgn_security?.is_honeypot ? "🚫HONEY" : (p.gmgn_security?.risk_level === "high" ? "⚠️HIGH" : "✅SAFE");
+
+    return `  [${i + 1}]  ${name}  fee/aTVL:${ftvl}  org:${org}  SM:${sm.padStart(5)}  Risk:${safe.padStart(6)}`;
   });
 
   return [
-    "  #   pool                  fee/aTVL     vol    in-range  organic",
+    "  #   pool                  fee/aTVL     org    SM      Risk",
     "  " + "─".repeat(68),
     ...lines,
   ].join("\n");
@@ -889,7 +892,7 @@ if (isTTY) {
   try {
     const [wallet, positions, { candidates, total_eligible, total_screened }] = await Promise.all([
       getWalletBalances(),
-      getMyPositions({ force: true }),
+      getMyPositions({ force: true, enrich_gmgn: true }),
       getTopCandidates({ limit: 5 }),
     ]);
 
@@ -902,7 +905,8 @@ if (isTTY) {
       console.log("Open positions:");
       for (const p of positions.positions) {
         const status = p.in_range ? "in-range ✓" : "OUT OF RANGE ⚠";
-        console.log(`  ${p.pair.padEnd(16)} ${status}  fees: $${p.unclaimed_fees_usd}`);
+        const safety = p.gmgn_security?.is_honeypot ? " [🚫 HONEYPOT]" : (p.gmgn_security?.risk_level === "high" ? " [⚠️ HIGH RISK]" : "");
+        console.log(`  ${p.pair.padEnd(16)} ${status}${safety}  fees: $${p.unclaimed_fees_usd}`);
       }
       console.log();
     }
@@ -953,14 +957,15 @@ if (isTTY) {
 
     if (text === "/positions") {
       try {
-        const { positions, total_positions } = await getMyPositions({ force: true });
+        const { positions, total_positions } = await getMyPositions({ force: true, enrich_gmgn: true });
         if (total_positions === 0) { await sendMessage("No open positions."); return; }
         const cur = config.management.solMode ? "◎" : "$";
         const lines = positions.map((p, i) => {
           const pnl = p.pnl_usd >= 0 ? `+${cur}${p.pnl_usd}` : `-${cur}${Math.abs(p.pnl_usd)}`;
           const age = p.age_minutes != null ? `${p.age_minutes}m` : "?";
           const oor = !p.in_range ? " ⚠️OOR" : "";
-          return `${i + 1}. ${p.pair} | ${cur}${p.total_value_usd} | PnL: ${pnl} | fees: ${cur}${p.unclaimed_fees_usd} | ${age}${oor}`;
+          const safety = p.gmgn_security?.risk_level === "high" ? " 🔴" : "";
+          return `${i + 1}. ${p.pair} | ${cur}${p.total_value_usd} | PnL: ${pnl} | fees: ${cur}${p.unclaimed_fees_usd} | ${age}${oor}${safety}`;
         });
         await sendMessage(`📊 Open Positions (${total_positions}):\n\n${lines.join("\n")}\n\n/close <n> to close | /set <n> <note> to set instruction`);
       } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
@@ -1052,6 +1057,7 @@ Commands:
   /briefing      Show morning briefing (last 24h)
   /learn         Study top LPers from the best current pool and save lessons
   /learn <addr>  Study top LPers from a specific pool address
+  /gmgn <mint>   Show detailed GMGN security & alpha report for a token
   /thresholds    Show current screening thresholds + performance stats
   /evolve        Manually trigger threshold evolution from performance data
   /stop          Shut down
@@ -1113,7 +1119,10 @@ Commands:
 
     if (input === "/status") {
       await runBusy(async () => {
-        const [wallet, positions] = await Promise.all([getWalletBalances(), getMyPositions({ force: true })]);
+        const [wallet, positions] = await Promise.all([
+          getWalletBalances(),
+          getMyPositions({ force: true, enrich_gmgn: true })
+        ]);
         console.log(`\nWallet: ${wallet.sol} SOL  ($${wallet.sol_usd})`);
         console.log(`Positions: ${positions.total_positions}`);
         for (const p of positions.positions) {
@@ -1141,6 +1150,22 @@ Commands:
         console.log(formatCandidates(candidates));
         console.log();
       });
+      return;
+    }
+
+    if (input.startsWith("/gmgn")) {
+      const mint = input.split(" ")[1];
+      if (!mint) {
+        console.log("Usage: /gmgn <mint_address>");
+      } else {
+        await runBusy(async () => {
+          const { getGMGNTokenAnalysis, formatGMGNReport } = await import("./tools/gmgn.js");
+          console.log(`\nFetching GMGN report for ${mint}...\n`);
+          const data = await getGMGNTokenAnalysis(mint);
+          console.log(formatGMGNReport(mint, data));
+          console.log();
+        });
+      }
       return;
     }
 
