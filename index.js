@@ -794,6 +794,22 @@ async function shutdown(signal) {
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
+process.on("unhandledRejection", (reason, promise) => {
+  if (reason?.message?.includes("fetch failed") || reason?.message?.includes("ECONNRESET") || reason?.code === "ECONNRESET") {
+    log("error", `Network or RPC error (handled rejection): ${reason?.message || reason}`);
+    return;
+  }
+  log("error", `Unhandled Rejection: ${reason?.stack || reason?.message || reason}`);
+});
+
+process.on("uncaughtException", (error) => {
+  if (error?.message?.includes("fetch failed") || error?.message?.includes("ECONNRESET") || error?.code === "ECONNRESET") {
+    log("error", `Uncaught network exception (handled): ${error?.message}`);
+    return;
+  }
+  log("error", `Uncaught Exception: ${error?.stack || error?.message}`);
+});
+
 // ═══════════════════════════════════════════
 //  FORMAT CANDIDATES TABLE
 // ═══════════════════════════════════════════
