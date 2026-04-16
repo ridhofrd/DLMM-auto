@@ -16,6 +16,7 @@ import { getActiveStrategy } from "./strategy-library.js";
 import { recordPositionSnapshot, recallForPool, addPoolNote } from "./pool-memory.js";
 import { checkSmartWalletsOnPool } from "./smart-wallets.js";
 import { getTokenNarrative, getTokenInfo } from "./tools/token.js";
+import { getGMGNTokenAnalysis } from "./tools/gmgn.js";
 import { startUIServer, commandListeners } from "./ui-server.js";
 
 startUIServer();
@@ -405,10 +406,11 @@ export async function runScreeningCycle({ silent = false } = {}) {
     const allCandidates = [];
     for (const pool of candidates) {
       const mint = pool.base?.mint;
-      const [smartWallets, narrative, tokenInfo] = await Promise.allSettled([
+      const [smartWallets, narrative, tokenInfo, gmgn] = await Promise.allSettled([
         checkSmartWalletsOnPool({ pool_address: pool.pool }),
         mint ? getTokenNarrative({ mint }) : Promise.resolve(null),
         mint ? getTokenInfo({ query: mint }) : Promise.resolve(null),
+        mint ? getGMGNTokenAnalysis(mint) : Promise.resolve(null),
       ]);
       allCandidates.push({
         pool,
@@ -416,6 +418,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
         n: narrative.status === "fulfilled" ? narrative.value : null,
         ti: tokenInfo.status === "fulfilled" ? tokenInfo.value?.results?.[0] : null,
         mem: recallForPool(pool.pool),
+        gmgn: gmgn.status === "fulfilled" ? gmgn.value : null,
       });
       await new Promise(r => setTimeout(r, 150)); // avoid 429s
     }
@@ -457,7 +460,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
     );
 
     // Build compact candidate blocks
-    const candidateBlocks = passing.map(({ pool, sw, n, ti, mem }, i) => {
+    const candidateBlocks = passing.map(({ pool, sw, n, ti, mem, gmgn }, i) => {
       const botPct = ti?.audit?.bot_holders_pct ?? "?";
       const top10Pct = ti?.audit?.top_holders_pct ?? "?";
       const feesSol = ti?.global_fees_sol ?? "?";
@@ -465,6 +468,14 @@ export async function runScreeningCycle({ silent = false } = {}) {
       const priceChange = ti?.stats_1h?.price_change;
       const netBuyers = ti?.stats_1h?.net_buyers;
       const activeBin = activeBinResults[i]?.status === "fulfilled" ? activeBinResults[i].value?.binId : null;
+
+      const gmgnParts = [
+        gmgn?.security?.is_honeypot ? `honeypot: YES` : null,
+        gmgn?.security?.risk_level ? `risk_level: ${gmgn.security.risk_level}` : null,
+        gmgn?.stats?.smart_money_count != null ? `smart_money: ${gmgn.stats.smart_money_count}` : null,
+        gmgn?.stats?.whale_count != null ? `whales: ${gmgn.stats.whale_count}` : null,
+        gmgn?.stats?.sniper_count != null ? `snipers: ${gmgn.stats.sniper_count}` : null,
+      ].filter(Boolean).join(", ");
 
       // OKX signals
       const okxParts = [
@@ -490,6 +501,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
         `POOL: ${pool.name} (${pool.pool})`,
         `  metrics: bin_step=${pool.bin_step}, fee_pct=${pool.fee_pct}%, fee_tvl=${pool.fee_active_tvl_ratio}, vol=$${pool.volume_window}, tvl=$${pool.active_tvl}, volatility=${pool.volatility}, mcap=$${pool.mcap}, organic=${pool.organic_score}${pool.token_age_hours != null ? `, age=${pool.token_age_hours}h` : ""}`,
         `  audit: top10=${top10Pct}%, bots=${botPct}%, fees=${feesSol}SOL${launchpad ? `, launchpad=${launchpad}` : ""}`,
+        gmgnParts ? `  gmgn: ${gmgnParts}` : null,
         okxParts ? `  okx: ${okxParts}` : okxUnavailable ? `  okx: unavailable` : null,
         okxTags ? `  tags: ${okxTags}` : null,
         pool.price_vs_ath_pct != null ? `  ath: price_vs_ath=${pool.price_vs_ath_pct}%${pool.top_cluster_trend ? `, top_cluster=${pool.top_cluster_trend}` : ""}` : null,
@@ -551,6 +563,10 @@ STEPS:
    <If OKX advanced/risk data exists, list only the fields that actually exist: Risk level, Bundle, Sniper, Suspicious, ATH distance, Rugpull, Wash.>
    <If only rugpull/wash exist, list just those.>
    <If OKX enrichment is missing, write exactly: OKX: unavailable>
+
+   GMGN
+   <If GMGN data exists, list the following fields: Honeypot, Risk Level, Smart Money, Whales, Snipers>
+   <If missing, write exactly: GMGN: unavailable>
 
    WHY THIS WON
    <2-4 concise sentences on why this pool won, key risks, and why it still beat the alternatives>

@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USER_CONFIG_PATH = path.join(__dirname, "user-config.json");
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
-const BASE  = TOKEN ? `https://api.telegram.org/bot${TOKEN}` : null;
+const BASE = TOKEN ? `https://api.telegram.org/bot${TOKEN}` : null;
 const ALLOWED_USER_IDS = new Set(
   String(process.env.TELEGRAM_ALLOWED_USER_IDS || "")
     .split(",")
@@ -15,8 +15,8 @@ const ALLOWED_USER_IDS = new Set(
     .filter(Boolean)
 );
 
-let chatId   = process.env.TELEGRAM_CHAT_ID || null;
-let _offset  = 0;
+let chatId = process.env.TELEGRAM_CHAT_ID || null;
+let _offset = 0;
 let _polling = false;
 let _liveMessageDepth = 0;
 let _warnedMissingChatId = false;
@@ -157,7 +157,7 @@ export function hasActiveLiveMessage() {
 
 function createTypingIndicator() {
   if (!TOKEN || !chatId) {
-    return { stop() {} };
+    return { stop() { } };
   }
 
   let stopped = false;
@@ -246,6 +246,7 @@ export async function createLiveMessage(title, intro = "Starting...") {
     flushTimer: null,
     flushPromise: null,
     flushRequested: false,
+    isFlushing: false,
   };
 
   function render() {
@@ -257,19 +258,28 @@ export async function createLiveMessage(title, intro = "Starting...") {
   }
 
   async function flushNow() {
+    state.isFlushing = true;
     state.flushTimer = null;
     state.flushRequested = false;
-    const text = render();
-    if (!state.messageId) {
-      const sent = await sendMessage(text);
-      state.messageId = sent?.result?.message_id ?? null;
-      return;
+
+    try {
+      const text = render();
+      if (!state.messageId) {
+        const sent = await sendMessage(text);
+        state.messageId = sent?.result?.message_id ?? null;
+      } else {
+        await editMessage(text, state.messageId);
+      }
+    } finally {
+      state.isFlushing = false;
+      if (state.flushRequested) {
+        scheduleFlush(1000);
+      }
     }
-    await editMessage(text, state.messageId);
   }
 
-  function scheduleFlush(delay = 300) {
-    if (state.flushTimer) {
+  function scheduleFlush(delay = 1000) {
+    if (state.flushTimer || state.isFlushing) {
       state.flushRequested = true;
       return;
     }
@@ -415,8 +425,8 @@ export async function notifyDeploy({
 
   const gmgnStr = (gmgn_risk || gmgn_sm)
     ? `\n🛡️ <b>GMGN Intelligence:</b>\n` +
-      (gmgn_risk ? `Risk: ${gmgn_risk === 'high' ? '🔴 HIGH' : gmgn_risk === 'medium' ? '🟡 MED' : '🟢 SAFE'}\n` : "") +
-      (gmgn_sm != null ? `Smart Money: 🚀 ${gmgn_sm} wallets\n` : "")
+    (gmgn_risk ? `Risk: ${gmgn_risk === 'high' ? '🔴 HIGH' : gmgn_risk === 'medium' ? '🟡 MED' : '🟢 SAFE'}\n` : "") +
+    (gmgn_sm != null ? `Smart Money: 🚀 ${gmgn_sm} wallets\n` : "")
     : "";
 
   await sendHTML(
