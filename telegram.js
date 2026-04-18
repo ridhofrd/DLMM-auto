@@ -29,7 +29,9 @@ function loadChatId() {
       const cfg = JSON.parse(fs.readFileSync(USER_CONFIG_PATH, "utf8"));
       if (cfg.telegramChatId) chatId = cfg.telegramChatId;
     }
-  } catch { /**/ }
+  } catch (error) {
+    log("telegram_warn", `Invalid user-config.json; chatId not loaded: ${error.message}`);
+  }
 }
 
 function saveChatId(id) {
@@ -143,7 +145,7 @@ export async function sendHTML(html) {
   return postTelegram("sendMessage", { text: html.slice(0, TELEGRAM_MAX_MESSAGE), parse_mode: "HTML" });
 }
 
-export async function editMessage(text, messageId) {
+async function editMessage(text, messageId) {
   if (!TOKEN || !chatId || !messageId) return null;
   return postTelegram("editMessageText", {
     message_id: messageId,
@@ -151,7 +153,7 @@ export async function editMessage(text, messageId) {
   });
 }
 
-export function hasActiveLiveMessage() {
+function hasActiveLiveMessage() {
   return _liveMessageDepth > 0;
 }
 
@@ -414,6 +416,9 @@ export async function notifyDeploy({
   const priceStr = priceRange
     ? `Price range: ${priceRange.min < 0.0001 ? priceRange.min.toExponential(3) : priceRange.min.toFixed(6)} – ${priceRange.max < 0.0001 ? priceRange.max.toExponential(3) : priceRange.max.toFixed(6)}\n`
     : "";
+  const coverageStr = rangeCoverage
+    ? `Range cover: ${fmtPct(rangeCoverage.downside_pct)} downside | ${fmtPct(rangeCoverage.upside_pct)} upside | ${fmtPct(rangeCoverage.width_pct)} total\n`
+    : "";
   const poolStr = (binStep || baseFee)
     ? `Bin step: ${binStep ?? "?"}  |  Base fee: ${baseFee != null ? baseFee + "%" : "?"}\n`
     : "";
@@ -435,6 +440,7 @@ export async function notifyDeploy({
     binsStr +
     `Amount: ${escapeHtml(String(amountSol))} SOL\n` +
     priceStr +
+    coverageStr +
     poolStr +
     gmgnStr +
     `\nPosition: <code>${position?.slice(0, 8)}...</code>\n` +
@@ -470,4 +476,9 @@ export async function notifyOutOfRange({ pair, minutesOOR }) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function fmtPct(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(2)}%` : "?";
 }

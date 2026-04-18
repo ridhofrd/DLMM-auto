@@ -3,10 +3,102 @@ import { isBlacklisted } from "../token-blacklist.js";
 import { isDevBlocked, getBlockedDevs } from "../dev-blocklist.js";
 import { log } from "../logger.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
+import { confirmIndicatorPreset } from "./chart-indicators.js";
+import { getAgentMeridianBase, getAgentMeridianHeaders } from "./agent-meridian.js";
 
 const DATAPI_JUP = "https://datapi.jup.ag/v1";
 
 const POOL_DISCOVERY_BASE = "https://pool-discovery-api.datapi.meteora.ag";
+const PVP_SHORTLIST_LIMIT = 2;
+const PVP_RIVAL_LIMIT = 2;
+const PVP_MIN_ACTIVE_TVL = 5_000;
+const PVP_MIN_HOLDERS = 500;
+const PVP_MIN_GLOBAL_FEES_SOL = 30;
+
+function normalizeSymbol(symbol) {
+  return String(symbol || "").trim().toUpperCase();
+}
+
+function scoreCandidate(pool) {
+  const feeTvl = Number(pool.fee_active_tvl_ratio || 0);
+  const organic = Number(pool.organic_score || 0);
+  const volume = Number(pool.volume_window || 0);
+  const holders = Number(pool.holders || 0);
+  return feeTvl * 1000 + organic * 10 + volume / 100 + holders / 100;
+}
+
+async function fetchDiscordSignalCandidates() {
+  const res = await fetch(`${getAgentMeridianBase()}/signals/discord/candidates`, {
+    headers: getAgentMeridianHeaders(),
+  });
+  if (!res.ok) throw new Error(`discord signal candidates ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data?.candidates) ? data.candidates : [];
+}
+
+async function searchAssetsBySymbol(symbol) {
+  const res = await fetch(`${DATAPI_JUP}/assets/search?query=${encodeURIComponent(symbol)}`);
+  if (!res.ok) throw new Error(`assets/search ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [data];
+}
+
+async function findRivalPool(mint) {
+  const url = `https://dlmm.datapi.meteora.ag/pools?query=${encodeURIComponent(mint)}&sort_by=${encodeURIComponent("tvl:desc")}&filter_by=${encodeURIComponent(`tvl>${PVP_MIN_ACTIVE_TVL}`)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`rival pool search ${res.status}`);
+  const data = await res.json();
+  const pools = Array.isArray(data?.data) ? data.data : [];
+  return pools.find((pool) => pool?.token_x?.address === mint || pool?.token_y?.address === mint) || null;
+}
+
+async function enrichPvpRisk(pools) {
+  const shortlist = [...pools]
+    .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))
+    .slice(0, PVP_SHORTLIST_LIMIT);
+
+  if (shortlist.length === 0) return;
+
+  const symbolCache = new Map();
+
+  await Promise.all(shortlist.map(async (pool) => {
+    const symbol = normalizeSymbol(pool.base?.symbol);
+    const ownMint = pool.base?.mint;
+    if (!symbol || !ownMint) return;
+
+    let assets = symbolCache.get(symbol);
+    if (!assets) {
+      assets = await searchAssetsBySymbol(symbol).catch(() => []);
+      symbolCache.set(symbol, assets);
+    }
+
+    const rivalAssets = assets
+      .filter((asset) => normalizeSymbol(asset?.symbol) === symbol && asset?.id && asset.id !== ownMint)
+      .sort((a, b) => Number(b?.liquidity || 0) - Number(a?.liquidity || 0))
+      .slice(0, PVP_RIVAL_LIMIT);
+
+    for (const rival of rivalAssets) {
+      const rivalHolders = Number(rival?.holderCount || 0);
+      const rivalFees = Number(rival?.fees || 0);
+      if (rivalHolders < PVP_MIN_HOLDERS || rivalFees < PVP_MIN_GLOBAL_FEES_SOL) continue;
+
+      const rivalPool = await findRivalPool(rival.id).catch(() => null);
+      if (!rivalPool) continue;
+
+      pool.is_pvp = true;
+      pool.pvp_risk = "high";
+      pool.pvp_symbol = pool.base?.symbol || symbol;
+      pool.pvp_rival_name = rival?.name || pool.pvp_symbol;
+      pool.pvp_rival_mint = rival.id;
+      pool.pvp_rival_pool = rivalPool.address;
+      pool.pvp_rival_tvl = round(Number(rivalPool.tvl || 0));
+      pool.pvp_rival_holders = rivalHolders;
+      pool.pvp_rival_fees = Number(rivalFees.toFixed(2));
+      log("screening", `PVP guard: ${pool.name} has active rival ${pool.pvp_rival_name} (${rival.id.slice(0, 8)})`);
+      break;
+    }
+  }));
+}
 
 
 
@@ -21,6 +113,7 @@ export async function discoverPools({
   const filters = [
     "base_token_has_critical_warnings=false",
     "quote_token_has_critical_warnings=false",
+    s.excludeHighSupplyConcentration ? "base_token_has_high_supply_concentration=false" : null,
     "base_token_has_high_single_ownership=false",
     "pool_type=dlmm",
     `base_token_market_cap>=${s.minMcap}`,
@@ -28,29 +121,36 @@ export async function discoverPools({
     `base_token_holders>=${s.minHolders}`,
     `volume>=${s.minVolume}`,
     `tvl>=${s.minTvl}`,
-    `tvl<=${s.maxTvl}`,
+    s.maxTvl != null ? `tvl<=${s.maxTvl}` : null,
     `dlmm_bin_step>=${s.minBinStep}`,
     `dlmm_bin_step<=${s.maxBinStep}`,
     `fee_active_tvl_ratio>=${s.minFeeActiveTvlRatio}`,
     `base_token_organic_score>=${s.minOrganic}`,
-    "quote_token_organic_score>=60",
+    `quote_token_organic_score>=${s.minQuoteOrganic}`,
     s.minTokenAgeHours != null ? `base_token_created_at<=${Date.now() - s.minTokenAgeHours * 3_600_000}` : null,
     s.maxTokenAgeHours != null ? `base_token_created_at>=${Date.now() - s.maxTokenAgeHours * 3_600_000}` : null,
+    Array.isArray(s.allowedLaunchpads) && s.allowedLaunchpads.length > 0
+      ? `base_token_launchpad=[${s.allowedLaunchpads.join(",")}]`
+      : null,
   ].filter(Boolean).join("&&");
 
-  const url = `${POOL_DISCOVERY_BASE}/pools?` +
+  const useServerDiscovery = !!config.api.publicApiKey;
+  const url = useServerDiscovery
+    ? `${getAgentMeridianBase()}/discovery/pools?` +
+    `page_size=${page_size}` +
+    `&filter_by=${encodeURIComponent(filters)}` +
+    `&timeframe=${s.timeframe}` +
+    `&category=${s.category}`
+    : `${POOL_DISCOVERY_BASE}/pools?` +
     `page_size=${page_size}` +
     `&filter_by=${encodeURIComponent(filters)}` +
     `&timeframe=${s.timeframe}` +
     `&category=${s.category}`;
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Origin": "https://app.meteora.ag",
-    "Referer": "https://app.meteora.ag/"
-  };
 
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, {
+    headers: useServerDiscovery ? getAgentMeridianHeaders() : {},
+  });
+
   if (!res.ok) {
     let errText = "";
     try { errText = await res.text(); } catch (e) { }
@@ -59,7 +159,51 @@ export async function discoverPools({
 
   const data = await res.json();
 
-  const condensed = (data.data || []).map(condensePool);
+  let rawPools = Array.isArray(data.data) ? data.data : [];
+
+  if (config.screening.useDiscordSignals) {
+    const signalCandidates = await fetchDiscordSignalCandidates().catch((error) => {
+      log("screening", `Discord signal fetch failed: ${error.message}`);
+      return [];
+    });
+    const signalPools = signalCandidates
+      .map((candidate) => {
+        const discoveryPool = candidate.discovery_pool;
+        if (!discoveryPool?.pool_address) return null;
+        return {
+          ...discoveryPool,
+          discord_signal: true,
+          discord_signal_count: candidate.source_count || 1,
+          discord_signal_seen_count: candidate.seen_count || 1,
+          discord_signal_first_seen_at: candidate.first_seen_at || null,
+          discord_signal_last_seen_at: candidate.last_seen_at || null,
+        };
+      })
+      .filter(Boolean);
+
+    if (config.screening.discordSignalMode === "only") {
+      rawPools = signalPools;
+    } else if (signalPools.length > 0) {
+      const byPool = new Map(rawPools.map((pool) => [pool.pool_address, pool]));
+      for (const signalPool of signalPools) {
+        if (byPool.has(signalPool.pool_address)) {
+          byPool.set(signalPool.pool_address, {
+            ...byPool.get(signalPool.pool_address),
+            discord_signal: true,
+            discord_signal_count: signalPool.discord_signal_count,
+            discord_signal_seen_count: signalPool.discord_signal_seen_count,
+            discord_signal_first_seen_at: signalPool.discord_signal_first_seen_at,
+            discord_signal_last_seen_at: signalPool.discord_signal_last_seen_at,
+          });
+        } else {
+          byPool.set(signalPool.pool_address, signalPool);
+        }
+      }
+      rawPools = Array.from(byPool.values());
+    }
+  }
+
+  const condensed = rawPools.map(condensePool);
 
   // Hard-filter blacklisted tokens and blocked deployers (what pool discovery already gave us)
   let pools = condensed.filter((p) => {
@@ -123,6 +267,7 @@ export async function discoverPools({
 export async function getTopCandidates({ limit = 10 } = {}) {
   const { config } = await import("../config.js");
   const { pools } = await discoverPools({ page_size: 50 });
+  const filteredOut = [];
 
   // Exclude pools where the wallet already has an open position
   const { getMyPositions } = await import("./dlmm.js");
@@ -132,18 +277,41 @@ export async function getTopCandidates({ limit = 10 } = {}) {
 
   const eligible = pools
     .filter((p) => {
-      if (occupiedPools.has(p.pool) || occupiedMints.has(p.base?.mint)) return false;
+      if (occupiedPools.has(p.pool)) {
+        pushFilteredReason(filteredOut, p, "already have an open position in this pool");
+        return false;
+      }
+      if (occupiedMints.has(p.base?.mint)) {
+        pushFilteredReason(filteredOut, p, "already holding this base token in another pool");
+        return false;
+      }
       if (isPoolOnCooldown(p.pool)) {
         log("screening", `Filtered cooldown pool ${p.name} (${p.pool.slice(0, 8)})`);
+        pushFilteredReason(filteredOut, p, "pool cooldown active");
         return false;
       }
       if (isBaseMintOnCooldown(p.base?.mint)) {
         log("screening", `Filtered cooldown token ${p.base?.symbol} (${p.base?.mint?.slice(0, 8)})`);
+        pushFilteredReason(filteredOut, p, "token cooldown active");
         return false;
       }
       return true;
     })
+    .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))
     .slice(0, limit);
+
+  if (config.screening.avoidPvpSymbols && eligible.length > 0) {
+    await enrichPvpRisk(eligible);
+    if (config.screening.blockPvpSymbols) {
+      const before = eligible.length;
+      const pvpRemoved = eligible.filter((p) => p.is_pvp);
+      pvpRemoved.forEach((p) => pushFilteredReason(filteredOut, p, "PVP hard filter"));
+      eligible.splice(0, eligible.length, ...eligible.filter((p) => !p.is_pvp));
+      if (eligible.length < before) {
+        log("screening", `PVP hard filter removed ${before - eligible.length} pool(s)`);
+      }
+    }
+  }
 
   // Enrich with OKX data — advanced info (risk/bundle/sniper) + ATH price (no API key required)
   if (eligible.length > 0) {
@@ -206,12 +374,16 @@ export async function getTopCandidates({ limit = 10 } = {}) {
       }
       if (gmgn) {
         eligible[i].gmgn_security = gmgn.security;
-        eligible[i].gmgn_stats    = gmgn.stats;
+        eligible[i].gmgn_stats = gmgn.stats;
       }
     }
     // Wash trading hard filter — fake volume = misleading fee yield
     eligible.splice(0, eligible.length, ...eligible.filter((p) => {
-      if (p.is_wash) { log("screening", `Risk filter: dropped ${p.name} — wash trading flagged`); return false; }
+      if (p.is_wash) {
+        log("screening", `Risk filter: dropped ${p.name} — wash trading flagged`);
+        pushFilteredReason(filteredOut, p, "wash trading flagged");
+        return false;
+      }
       return true;
     }));
 
@@ -224,6 +396,7 @@ export async function getTopCandidates({ limit = 10 } = {}) {
         if (p.price_vs_ath_pct == null) return true; // no data → don't filter
         if (p.price_vs_ath_pct > threshold) {
           log("screening", `ATH filter: dropped ${p.name} — ${p.price_vs_ath_pct}% of ATH (limit: ${threshold}%)`);
+          pushFilteredReason(filteredOut, p, `${p.price_vs_ath_pct}% of ATH > ${threshold}% limit`);
           return false;
         }
         return true;
@@ -236,6 +409,7 @@ export async function getTopCandidates({ limit = 10 } = {}) {
     const filtered = eligible.filter((p) => {
       if (p.dev && isDevBlocked(p.dev)) {
         log("dev_blocklist", `Filtered blocked deployer (okx) ${p.dev.slice(0, 8)} token ${p.base?.symbol}`);
+        pushFilteredReason(filteredOut, p, "blocked deployer");
         return false;
       }
       return true;
@@ -244,9 +418,49 @@ export async function getTopCandidates({ limit = 10 } = {}) {
     if (eligible.length < before) log("dev_blocklist", `Filtered ${before - eligible.length} pool(s) via OKX creator check`);
   }
 
+  if (config.indicators.enabled && eligible.length > 0) {
+    const confirmations = await Promise.all(
+      eligible.map(async (pool) => {
+        try {
+          const confirmation = await confirmIndicatorPreset({
+            mint: pool.base?.mint,
+            side: "entry",
+          });
+          return { pool: pool.pool, confirmation };
+        } catch (error) {
+          return {
+            pool: pool.pool,
+            confirmation: {
+              enabled: true,
+              confirmed: true,
+              skipped: true,
+              reason: `Indicator confirmation unavailable: ${error.message}`,
+              intervals: [],
+            },
+          };
+        }
+      }),
+    );
+    const confirmationByPool = new Map(confirmations.map((entry) => [entry.pool, entry.confirmation]));
+    const before = eligible.length;
+    const confirmedEligible = eligible.filter((pool) => {
+      const confirmation = confirmationByPool.get(pool.pool);
+      pool.indicator_confirmation = confirmation || null;
+      if (!confirmation || confirmation.confirmed) return true;
+      pushFilteredReason(filteredOut, pool, `indicator reject: ${confirmation.reason}`);
+      log("screening", `Indicator rejected ${pool.name} (${pool.pool.slice(0, 8)}): ${confirmation.reason}`);
+      return false;
+    });
+    eligible.splice(0, eligible.length, ...confirmedEligible);
+    if (eligible.length < before) {
+      log("screening", `Indicator confirmation removed ${before - eligible.length} candidate(s)`);
+    }
+  }
+
   return {
     candidates: eligible,
     total_screened: pools.length,
+    filtered_examples: filteredOut.slice(0, 3),
   };
 }
 
@@ -256,25 +470,24 @@ export async function getTopCandidates({ limit = 10 } = {}) {
  * Returns the full unfiltered API object (all fields, not condensed).
  */
 export async function getPoolDetail({ pool_address, timeframe = "5m" }) {
-  const url = `${POOL_DISCOVERY_BASE}/pools?` +
+  const useServerDiscovery = !!config.api.publicApiKey;
+  const url = useServerDiscovery
+    ? `${getAgentMeridianBase()}/discovery/pools/${pool_address}?timeframe=${encodeURIComponent(timeframe)}`
+    : `${POOL_DISCOVERY_BASE}/pools?` +
     `page_size=1` +
     `&filter_by=${encodeURIComponent(`pool_address=${pool_address}`)}` +
     `&timeframe=${timeframe}`;
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Origin": "https://app.meteora.ag",
-    "Referer": "https://app.meteora.ag/"
-  };
 
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, {
+    headers: useServerDiscovery ? getAgentMeridianHeaders() : {},
+  });
 
   if (!res.ok) {
     throw new Error(`Pool detail API error: ${res.status} ${res.statusText}`);
   }
 
   const data = await res.json();
-  const pool = (data.data || [])[0];
+  const pool = useServerDiscovery ? data : (data.data || [])[0];
 
   if (!pool) {
     throw new Error(`Pool ${pool_address} not found`);
@@ -329,6 +542,10 @@ function condensePool(p) {
     active_positions: p.active_positions,
     active_pct: fix(p.active_positions_pct, 1),
     open_positions: p.open_positions,
+    discord_signal: Boolean(p.discord_signal),
+    discord_signal_count: p.discord_signal_count || 0,
+    discord_signal_seen_count: p.discord_signal_seen_count || 0,
+    discord_signal_last_seen_at: p.discord_signal_last_seen_at || null,
 
     // Price action
     price: p.pool_price,
@@ -351,4 +568,12 @@ function round(n) {
 
 function fix(n, decimals) {
   return n != null ? Number(n.toFixed(decimals)) : null;
+}
+
+function pushFilteredReason(list, pool, reason) {
+  if (!list || !pool) return;
+  list.push({
+    name: pool.name || `${pool.base?.symbol || "?"}-${pool.quote?.symbol || "?"}`,
+    reason,
+  });
 }
