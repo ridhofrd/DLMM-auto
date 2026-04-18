@@ -149,11 +149,11 @@ const toolMap = {
   },
   get_performance_history: getPerformanceHistory,
   get_recent_decisions: ({ limit } = {}) => ({ decisions: getRecentDecisions(limit || 6) }),
-  add_strategy:        addStrategy,
-  list_strategies:     listStrategies,
-  get_strategy:        getStrategy,
+  add_strategy: addStrategy,
+  list_strategies: listStrategies,
+  get_strategy: getStrategy,
   set_active_strategy: setActiveStrategy,
-  remove_strategy:     removeStrategy,
+  remove_strategy: removeStrategy,
   get_pool_memory: getPoolMemory,
   add_pool_note: addPoolNote,
   add_to_blacklist: addToBlacklist,
@@ -166,7 +166,7 @@ const toolMap = {
     addLesson(rule, tags || [], { pinned: !!pinned, role: role || null });
     return { saved: true, rule, pinned: !!pinned, role: role || "all" };
   },
-  pin_lesson:   ({ id }) => pinLesson(id),
+  pin_lesson: ({ id }) => pinLesson(id),
   unpin_lesson: ({ id }) => unpinLesson(id),
   list_lessons: ({ role, pinned, tag, limit } = {}) => listLessons({ role, pinned, tag, limit }),
   clear_lessons: ({ mode, keyword }) => {
@@ -211,14 +211,14 @@ const toolMap = {
       discordSignalMode: ["screening", "discordSignalMode"],
       avoidPvpSymbols: ["screening", "avoidPvpSymbols"],
       blockPvpSymbols: ["screening", "blockPvpSymbols"],
-      maxBundlePct:     ["screening", "maxBundlePct"],
+      maxBundlePct: ["screening", "maxBundlePct"],
       maxBotHoldersPct: ["screening", "maxBotHoldersPct"],
       maxTop10Pct: ["screening", "maxTop10Pct"],
       allowedLaunchpads: ["screening", "allowedLaunchpads"],
       blockedLaunchpads: ["screening", "blockedLaunchpads"],
       minTokenAgeHours: ["screening", "minTokenAgeHours"],
       maxTokenAgeHours: ["screening", "maxTokenAgeHours"],
-      athFilterPct:     ["screening", "athFilterPct"],
+      athFilterPct: ["screening", "athFilterPct"],
       minFeePerTvl24h: ["management", "minFeePerTvl24h"],
       // management
       minClaimAmount: ["management", "minClaimAmount"],
@@ -395,9 +395,8 @@ export async function executeTool(name, args) {
 
     if (success) {
       if (name === "swap_token" && result.tx) {
-        notifySwap({ inputSymbol: args.input_mint?.slice(0, 8), outputSymbol: args.output_mint === "So11111111111111111111111111111111111111112" || args.output_mint === "SOL" ? "SOL" : args.output_mint?.slice(0, 8), amountIn: result.amount_in, amountOut: result.amount_out, tx: result.tx }).catch(() => {});
+        notifySwap({ inputSymbol: args.input_mint?.slice(0, 8), outputSymbol: args.output_mint === "So11111111111111111111111111111111111111112" || args.output_mint === "SOL" ? "SOL" : args.output_mint?.slice(0, 8), amountIn: result.amount_in, amountOut: result.amount_out, tx: result.tx }).catch(() => { });
       } else if (name === "deploy_position") {
-<<<<<<< HEAD
         // Fetch GMGN for notification if not provided
         let gmgn_risk = null, gmgn_sm = null;
         try {
@@ -409,9 +408,9 @@ export async function executeTool(name, args) {
           const pool = await DLMM?.create(connection, new (await import("@solana/web3.js")).PublicKey(poolAddr)).catch(() => null);
           const mint = pool?.lbPair?.tokenXMint?.toString();
           if (mint) {
-             const gmgn = await getGMGNTokenAnalysis(mint);
-             gmgn_risk = gmgn.security?.risk_level;
-             gmgn_sm = gmgn.stats?.smart_money_count;
+            const gmgn = await getGMGNTokenAnalysis(mint);
+            gmgn_risk = gmgn.security?.risk_level;
+            gmgn_sm = gmgn.stats?.smart_money_count;
           }
         } catch (e) { /* ignore */ }
 
@@ -428,16 +427,13 @@ export async function executeTool(name, args) {
           binsAbove: result.bins_above ?? args.bins_above,
           gmgn_risk,
           gmgn_sm,
-        }).catch(() => {});
-=======
-        notifyDeploy({ pair: result.pool_name || args.pool_name || args.pool_address?.slice(0, 8), amountSol: args.amount_y ?? args.amount_sol ?? 0, position: result.position, tx: result.txs?.[0] ?? result.tx, priceRange: result.price_range, rangeCoverage: result.range_coverage, binStep: result.bin_step, baseFee: result.base_fee }).catch(() => {});
->>>>>>> 6657927fd75afa868fb6e8ca69dfdac7927f743b
+        }).catch(() => { });
       } else if (name === "close_position") {
-        notifyClose({ pair: result.pool_name || args.position_address?.slice(0, 8), pnlUsd: result.pnl_usd ?? 0, pnlPct: result.pnl_pct ?? 0 }).catch(() => {});
+        notifyClose({ pair: result.pool_name || args.position_address?.slice(0, 8), pnlUsd: result.pnl_usd ?? 0, pnlPct: result.pnl_pct ?? 0 }).catch(() => { });
         // Note low-yield closes in pool memory so screener avoids redeploying
         if (args.reason && args.reason.toLowerCase().includes("yield")) {
           const poolAddr = result.pool || args.pool_address;
-          if (poolAddr) addPoolNote({ pool_address: poolAddr, note: `Closed: low yield (fee/TVL below threshold) at ${new Date().toISOString().slice(0,10)}` }).catch?.(() => {});
+          if (poolAddr) addPoolNote({ pool_address: poolAddr, note: `Closed: low yield (fee/TVL below threshold) at ${new Date().toISOString().slice(0, 10)}` }).catch?.(() => { });
         }
         // Auto-swap base token back to SOL unless user said to hold
         if (!args.skip_swap && result.base_mint) {
