@@ -85,7 +85,8 @@ export function getHiveMindPullMode() {
 }
 
 export function isHiveMindEnabled() {
-  return !!(getBaseUrl() && getApiKey());
+  // return !!(getBaseUrl() && getApiKey());
+  return false;
 }
 
 export function ensureAgentId() {

@@ -70,129 +70,137 @@ function evaluatePreset(side, preset, payload) {
     case "supertrend_break":
       return side === "entry"
         ? {
-            confirmed: summary.supertrendBreakUp || (isBullish && close != null && summary.supertrendValue != null && close >= summary.supertrendValue),
-            reason: summary.supertrendBreakUp ? "Supertrend flipped bullish" : "Price is above bullish Supertrend",
-            signal: summary,
-          }
+          confirmed: summary.supertrendBreakUp || (isBullish && close != null && summary.supertrendValue != null && close >= summary.supertrendValue),
+          reason: summary.supertrendBreakUp ? "Supertrend flipped bullish" : "Price is above bullish Supertrend",
+          signal: summary,
+        }
         : {
-            confirmed: summary.supertrendBreakDown || (isBearish && close != null && summary.supertrendValue != null && close <= summary.supertrendValue),
-            reason: summary.supertrendBreakDown ? "Supertrend flipped bearish" : "Price is below bearish Supertrend",
-            signal: summary,
-          };
+          confirmed: summary.supertrendBreakDown || (isBearish && close != null && summary.supertrendValue != null && close <= summary.supertrendValue),
+          reason: summary.supertrendBreakDown ? "Supertrend flipped bearish" : "Price is below bearish Supertrend",
+          signal: summary,
+        };
     case "rsi_reversal":
       return side === "entry"
         ? {
-            confirmed: rsi != null && rsi <= oversold,
-            reason: `RSI ${rsi ?? "n/a"} <= oversold ${oversold}`,
-            signal: summary,
-          }
+          confirmed: rsi != null && rsi <= oversold,
+          reason: `RSI ${rsi ?? "n/a"} <= oversold ${oversold}`,
+          signal: summary,
+        }
         : {
-            confirmed: rsi != null && rsi >= overbought,
-            reason: `RSI ${rsi ?? "n/a"} >= overbought ${overbought}`,
-            signal: summary,
-          };
+          confirmed: rsi != null && rsi >= overbought,
+          reason: `RSI ${rsi ?? "n/a"} >= overbought ${overbought}`,
+          signal: summary,
+        };
+    case "rsi_overbought_do_not_entry":
+      return side === "entry"
+        ? {
+          confirmed: rsi != null && rsi <= overbought,
+          reason: `RSI ${rsi ?? "n/a"} <= overbought ${overbought}`,
+          signal: summary,
+        }
+        : false
     case "bollinger_reversion":
       return side === "entry"
         ? {
-            confirmed: close != null && lowerBand != null && close <= lowerBand,
-            reason: `Close ${close ?? "n/a"} <= lower band ${lowerBand ?? "n/a"}`,
-            signal: summary,
-          }
+          confirmed: close != null && lowerBand != null && close <= lowerBand,
+          reason: `Close ${close ?? "n/a"} <= lower band ${lowerBand ?? "n/a"}`,
+          signal: summary,
+        }
         : {
-            confirmed: close != null && upperBand != null && close >= upperBand,
-            reason: `Close ${close ?? "n/a"} >= upper band ${upperBand ?? "n/a"}`,
-            signal: summary,
-          };
+          confirmed: close != null && upperBand != null && close >= upperBand,
+          reason: `Close ${close ?? "n/a"} >= upper band ${upperBand ?? "n/a"}`,
+          signal: summary,
+        };
     case "rsi_plus_supertrend":
       return side === "entry"
         ? {
-            confirmed:
-              (rsi != null && rsi <= oversold) &&
-              (summary.supertrendBreakUp || isBullish),
-            reason: `RSI oversold with bullish Supertrend context`,
-            signal: summary,
-          }
+          confirmed:
+            (rsi != null && rsi <= oversold) &&
+            (summary.supertrendBreakUp || isBullish),
+          reason: `RSI oversold with bullish Supertrend context`,
+          signal: summary,
+        }
         : {
-            confirmed:
-              (rsi != null && rsi >= overbought) &&
-              (summary.supertrendBreakDown || isBearish),
-            reason: `RSI overbought with bearish Supertrend context`,
-            signal: summary,
-          };
+          confirmed:
+            (rsi != null && rsi >= overbought) &&
+            (summary.supertrendBreakDown || isBearish),
+          reason: `RSI overbought with bearish Supertrend context`,
+          signal: summary,
+        };
     case "supertrend_or_rsi":
       return side === "entry"
         ? {
-            confirmed:
-              summary.supertrendBreakUp ||
-              (isBullish && close != null && summary.supertrendValue != null && close >= summary.supertrendValue) ||
-              (rsi != null && rsi <= oversold),
-            reason: "Supertrend bullish confirmation or RSI oversold",
-            signal: summary,
-          }
+          confirmed:
+            summary.supertrendBreakUp ||
+            (isBullish && close != null && summary.supertrendValue != null && close >= summary.supertrendValue) ||
+            (rsi != null && rsi <= oversold),
+          reason: "Supertrend bullish confirmation or RSI oversold",
+          signal: summary,
+        }
         : {
-            confirmed:
-              summary.supertrendBreakDown ||
-              (isBearish && close != null && summary.supertrendValue != null && close <= summary.supertrendValue) ||
-              (rsi != null && rsi >= overbought),
-            reason: "Supertrend bearish confirmation or RSI overbought",
-            signal: summary,
-          };
+          confirmed:
+            summary.supertrendBreakDown ||
+            (isBearish && close != null && summary.supertrendValue != null && close <= summary.supertrendValue) ||
+            (rsi != null && rsi >= overbought),
+          reason: "Supertrend bearish confirmation or RSI overbought",
+          signal: summary,
+        };
     case "bb_plus_rsi":
       return side === "entry"
         ? {
-            confirmed:
-              close != null &&
-              lowerBand != null &&
-              close <= lowerBand &&
-              rsi != null &&
-              rsi <= oversold,
-            reason: "Close at/below lower band with RSI oversold",
-            signal: summary,
-          }
+          confirmed:
+            close != null &&
+            lowerBand != null &&
+            close <= lowerBand &&
+            rsi != null &&
+            rsi <= oversold,
+          reason: "Close at/below lower band with RSI oversold",
+          signal: summary,
+        }
         : {
-            confirmed:
-              close != null &&
-              upperBand != null &&
-              close >= upperBand &&
-              rsi != null &&
-              rsi >= overbought,
-            reason: "Close at/above upper band with RSI overbought",
-            signal: summary,
-          };
+          confirmed:
+            close != null &&
+            upperBand != null &&
+            close >= upperBand &&
+            rsi != null &&
+            rsi >= overbought,
+          reason: "Close at/above upper band with RSI overbought",
+          signal: summary,
+        };
     case "fibo_reclaim":
       return side === "entry"
         ? {
-            confirmed:
-              crossedUp(summary.fib618) ||
-              crossedUp(summary.fib50) ||
-              crossedUp(summary.fib786),
-            reason: "Price reclaimed a key Fibonacci level",
-            signal: summary,
-          }
+          confirmed:
+            crossedUp(summary.fib618) ||
+            crossedUp(summary.fib50) ||
+            crossedUp(summary.fib786),
+          reason: "Price reclaimed a key Fibonacci level",
+          signal: summary,
+        }
         : {
-            confirmed:
-              crossedUp(summary.fib618) ||
-              crossedUp(summary.fib50),
-            reason: "Price reclaimed a key Fibonacci level upward",
-            signal: summary,
-          };
+          confirmed:
+            crossedUp(summary.fib618) ||
+            crossedUp(summary.fib50),
+          reason: "Price reclaimed a key Fibonacci level upward",
+          signal: summary,
+        };
     case "fibo_reject":
       return side === "entry"
         ? {
-            confirmed:
-              crossedDown(summary.fib618) ||
-              crossedDown(summary.fib50),
-            reason: "Price rejected from a key Fibonacci level",
-            signal: summary,
-          }
+          confirmed:
+            crossedDown(summary.fib618) ||
+            crossedDown(summary.fib50),
+          reason: "Price rejected from a key Fibonacci level",
+          signal: summary,
+        }
         : {
-            confirmed:
-              crossedDown(summary.fib618) ||
-              crossedDown(summary.fib50) ||
-              crossedDown(summary.fib786),
-            reason: "Price rejected below a key Fibonacci level",
-            signal: summary,
-          };
+          confirmed:
+            crossedDown(summary.fib618) ||
+            crossedDown(summary.fib50) ||
+            crossedDown(summary.fib786),
+          reason: "Price rejected below a key Fibonacci level",
+          signal: summary,
+        };
     default:
       return {
         confirmed: false,
