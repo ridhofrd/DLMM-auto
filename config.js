@@ -216,10 +216,10 @@ export function getDynamicTakeProfitPct() {
   const now = new Date();
   const utc7Hour = (now.getUTCHours() + 7) % 24;
 
-  if (utc7Hour >= 19 || utc7Hour < 2) return 5.0;
-  if (utc7Hour >= 2 && utc7Hour < 7) return 5.0;
-  if (utc7Hour >= 7 && utc7Hour < 13) return 5.0;
-  return 5.0;
+  if (utc7Hour >= 19 || utc7Hour < 2) return 10.0;
+  if (utc7Hour >= 2 && utc7Hour < 7) return 10.0;
+  if (utc7Hour >= 7 && utc7Hour < 13) return 10.0;
+  return 10.0;
 }
 
 export function reloadScreeningThresholds() {
