@@ -46,6 +46,9 @@ export const config = {
   screening: {
     excludeHighSupplyConcentration: u.excludeHighSupplyConcentration ?? true,
     minFeeActiveTvlRatio: u.minFeeActiveTvlRatio ?? 0.05,
+    maxFeeActiveTvlRatio: u.maxFeeActiveTvlRatio ?? null,
+    minVolatility: u.minVolatility ?? null,
+    maxVolatility: u.maxVolatility ?? null,
     minTvl: u.minTvl ?? 10_000,
     maxTvl: u.maxTvl !== undefined ? u.maxTvl : 150_000,
     minVolume: u.minVolume ?? 500,
@@ -228,6 +231,9 @@ export function reloadScreeningThresholds() {
     const fresh = JSON.parse(fs.readFileSync(USER_CONFIG_PATH, "utf8"));
     const s = config.screening;
     if (fresh.minFeeActiveTvlRatio != null) s.minFeeActiveTvlRatio = fresh.minFeeActiveTvlRatio;
+    if (fresh.maxFeeActiveTvlRatio !== undefined) s.maxFeeActiveTvlRatio = fresh.maxFeeActiveTvlRatio;
+    if (fresh.minVolatility !== undefined) s.minVolatility = fresh.minVolatility;
+    if (fresh.maxVolatility !== undefined) s.maxVolatility = fresh.maxVolatility;
     if (fresh.useDiscordSignals !== undefined) s.useDiscordSignals = fresh.useDiscordSignals;
     if (fresh.discordSignalMode != null) s.discordSignalMode = fresh.discordSignalMode;
     if (fresh.excludeHighSupplyConcentration !== undefined) s.excludeHighSupplyConcentration = fresh.excludeHighSupplyConcentration;
