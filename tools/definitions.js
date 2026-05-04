@@ -382,8 +382,8 @@ WARNING: This executes a real on-chain transaction.`,
 Changes persist to user-config.json and take effect immediately — no restart needed.
 
 VALID KEYS (use EXACTLY these key names, nothing else):
-Screening: minFeeActiveTvlRatio, minTvl, maxTvl, minVolume, minOrganic, minQuoteOrganic, minHolders, minMcap, maxMcap, minBinStep, maxBinStep, timeframe, category, minTokenFeesSol, excludeHighSupplyConcentration, allowedLaunchpads, blockedLaunchpads
-Management: minClaimAmount, outOfRangeBinsToClose, outOfRangeWaitMinutes, minVolumeToRebalance, stopLossPct, takeProfitPct, minSolToOpen, deployAmountSol, gasReserve, positionSizePct
+Screening: minFeeActiveTvlRatio, maxFeeActiveTvlRatio, minTvl, maxTvl, minVolume, minOrganic, minQuoteOrganic, minHolders, minMcap, maxMcap, minBinStep, maxBinStep, timeframe, category, minTokenFeesSol, excludeHighSupplyConcentration, allowedLaunchpads, blockedLaunchpads
+Management: minClaimAmount, outOfRangeBinsToClose, outOfRangeWaitMinutes, minVolumeToRebalance, stopLossPct, takeProfitPct, minSolToOpen, deployAmountSol, gasReserve, positionSizePct, maxVolatility, minVolatility
 Risk: maxPositions, maxDeployAmount
 Schedule: managementIntervalMin, screeningIntervalMin
 Models: managementModel, screeningModel, generalModel
@@ -799,47 +799,47 @@ The strategy will be available for selection before future deployments.`,
       parameters: {
         type: "object",
         properties: {
-          id:           { type: "string", description: "Short slug e.g. 'overnight_classic_bid_ask', 'panda_strat'" },
-          name:         { type: "string", description: "Human-readable name" },
-          author:       { type: "string", description: "Strategy author/creator" },
-          lp_strategy:  { type: "string", enum: ["bid_ask", "spot", "curve"], description: "LP strategy type" },
+          id: { type: "string", description: "Short slug e.g. 'overnight_classic_bid_ask', 'panda_strat'" },
+          name: { type: "string", description: "Human-readable name" },
+          author: { type: "string", description: "Strategy author/creator" },
+          lp_strategy: { type: "string", enum: ["bid_ask", "spot", "curve"], description: "LP strategy type" },
           token_criteria: {
             type: "object",
             description: "Token selection criteria",
             properties: {
-              min_mcap:      { type: "number", description: "Minimum market cap in USD" },
-              min_age_days:  { type: "number", description: "Minimum token age in days" },
-              requires_kol:  { type: "boolean", description: "Requires KOL presence" },
-              notes:         { type: "string", description: "Additional token selection notes" }
+              min_mcap: { type: "number", description: "Minimum market cap in USD" },
+              min_age_days: { type: "number", description: "Minimum token age in days" },
+              requires_kol: { type: "boolean", description: "Requires KOL presence" },
+              notes: { type: "string", description: "Additional token selection notes" }
             }
           },
           entry: {
             type: "object",
             description: "Entry conditions",
             properties: {
-              condition:                    { type: "string", description: "Entry condition description" },
-              price_change_threshold_pct:   { type: "number", description: "Price change % that triggers entry (e.g. -30 for -30% from ATH)" },
-              single_side:                  { type: "string", description: "sol or token" }
+              condition: { type: "string", description: "Entry condition description" },
+              price_change_threshold_pct: { type: "number", description: "Price change % that triggers entry (e.g. -30 for -30% from ATH)" },
+              single_side: { type: "string", description: "sol or token" }
             }
           },
           range: {
             type: "object",
             description: "Bin range configuration",
             properties: {
-              type:           { type: "string", enum: ["tight", "default", "wide", "panda"], description: "Range type (tight 10-30%, default 40-57%, wide 60%+, panda 85-90%)" },
+              type: { type: "string", enum: ["tight", "default", "wide", "panda"], description: "Range type (tight 10-30%, default 40-57%, wide 60%+, panda 85-90%)" },
               bins_below_pct: { type: "number", description: "How far below entry price the range covers (%)" },
-              notes:          { type: "string" }
+              notes: { type: "string" }
             }
           },
           exit: {
             type: "object",
             properties: {
               take_profit_pct: { type: "number", description: "Take profit threshold %" },
-              notes:           { type: "string" }
+              notes: { type: "string" }
             }
           },
           best_for: { type: "string", description: "Short description of ideal market conditions for this strategy" },
-          raw:      { type: "string", description: "Original tweet or text the strategy was parsed from" }
+          raw: { type: "string", description: "Original tweet or text the strategy was parsed from" }
         },
         required: ["id", "name"]
       }
@@ -913,10 +913,10 @@ Use to find a lesson ID before pinning/unpinning, or to audit what the agent cur
       parameters: {
         type: "object",
         properties: {
-          role:   { type: "string", enum: ["SCREENER", "MANAGER", "GENERAL"], description: "Filter by role" },
+          role: { type: "string", enum: ["SCREENER", "MANAGER", "GENERAL"], description: "Filter by role" },
           pinned: { type: "boolean", description: "Filter to only pinned (true) or unpinned (false) lessons" },
-          tag:    { type: "string", description: "Filter by a specific tag" },
-          limit:  { type: "number", description: "Max lessons to return (default 30)" }
+          tag: { type: "string", description: "Filter by a specific tag" },
+          limit: { type: "number", description: "Max lessons to return (default 30)" }
         }
       }
     }
@@ -1096,9 +1096,9 @@ Blacklisted tokens are filtered BEFORE the LLM even sees pool candidates.`,
       parameters: {
         type: "object",
         properties: {
-          wallet:  { type: "string", description: "Deployer wallet address (base58)" },
-          label:   { type: "string", description: "Human-readable label (e.g. 'known rugger')" },
-          reason:  { type: "string", description: "Why this deployer is being blocked" },
+          wallet: { type: "string", description: "Deployer wallet address (base58)" },
+          label: { type: "string", description: "Human-readable label (e.g. 'known rugger')" },
+          reason: { type: "string", description: "Why this deployer is being blocked" },
         },
         required: ["wallet"]
       }
