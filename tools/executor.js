@@ -193,6 +193,7 @@ const toolMap = {
     const CONFIG_MAP = {
       // screening
       minFeeActiveTvlRatio: ["screening", "minFeeActiveTvlRatio"],
+      maxFeeActiveTvlRatio: ["screening", "maxFeeActiveTvlRatio"],
       excludeHighSupplyConcentration: ["screening", "excludeHighSupplyConcentration"],
       minTvl: ["screening", "minTvl"],
       maxTvl: ["screening", "maxTvl"],
@@ -219,6 +220,8 @@ const toolMap = {
       minTokenAgeHours: ["screening", "minTokenAgeHours"],
       maxTokenAgeHours: ["screening", "maxTokenAgeHours"],
       athFilterPct: ["screening", "athFilterPct"],
+      minVolatility: ["screening", "minVolatility"],
+      maxVolatility: ["screening", "maxVolatility"],
       minFeePerTvl24h: ["management", "minFeePerTvl24h"],
       // management
       minClaimAmount: ["management", "minClaimAmount"],
