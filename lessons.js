@@ -149,13 +149,18 @@ export async function recordPerformance(perf) {
     });
   }
 
-  // Evolve thresholds every 5 closed positions
+  // Evolve thresholds every 5 closed positions (if enabled)
   if (data.performance.length % MIN_EVOLVE_POSITIONS === 0) {
     const { config, reloadScreeningThresholds } = await import("./config.js");
-    const result = evolveThresholds(data.performance, config);
-    if (result?.changes && Object.keys(result.changes).length > 0) {
-      reloadScreeningThresholds();
-      log("evolve", `Auto-evolved thresholds: ${JSON.stringify(result.changes)}`);
+
+    if (config.autoEvolve) {
+      const result = evolveThresholds(data.performance, config);
+      if (result?.changes && Object.keys(result.changes).length > 0) {
+        reloadScreeningThresholds();
+        log("evolve", `Auto-evolved thresholds: ${JSON.stringify(result.changes)}`);
+      }
+    } else {
+      log("evolve", `Auto-evolution is disabled (autoEvolve=false). Skipping.`);
     }
 
     // Darwinian signal weight recalculation
@@ -174,6 +179,22 @@ export async function recordPerformance(perf) {
     fees_earned_sol: perf.fees_earned_sol || 0,
     eventId: `close:${perf.position}:${entry.recorded_at}`,
   });
+
+  // Capture market conditions at position close for chronological analysis
+  void import("./market-snapshot.js")
+    .then(({ takeMarketSnapshot }) =>
+      takeMarketSnapshot({
+        trigger: "position_close",
+        extra: {
+          pool: perf.pool,
+          pool_name: perf.pool_name,
+          pnl_pct: entry.pnl_pct,
+          pnl_usd: entry.pnl_usd,
+          close_reason: perf.close_reason,
+        },
+      })
+    )
+    .catch(() => {});
 
 }
 

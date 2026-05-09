@@ -431,6 +431,15 @@ export async function runScreeningCycle({ silent = false } = {}) {
   }
   timers.screeningLastRun = Date.now();
   log("cron", `Starting screening cycle [model: ${config.llm.screeningModel}]`);
+
+    // Capture market conditions at screening time
+    try {
+      const { takeMarketSnapshot } = await import("./market-snapshot.js");
+      await takeMarketSnapshot({ trigger: "screening_cycle" });
+    } catch (snapErr) {
+      log("snapshot_warn", `Market snapshot failed: ${snapErr.message}`);
+    }
+
   try {
     // Reuse pre-fetched balance — no extra RPC call needed
     const currentBalance = preBalance;

@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+#Data analytics
+data_analytics/
+
 # Environment & secrets
 .env
 .env.*
@@ -19,6 +22,7 @@ strategy-library.json
 decision-log.json
 hivemind-cache.json
 signal-weights.json
+market-snapshots.json
 
 # Logs
 logs/

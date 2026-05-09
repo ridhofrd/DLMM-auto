@@ -127,6 +127,9 @@ export const config = {
     generalModel: u.generalModel ?? process.env.LLM_MODEL ?? "openrouter/healer-alpha",
   },
 
+  // ─── Adaptive Evolution ──────────────
+  autoEvolve: u.autoEvolve ?? true,  // auto-evolve screening thresholds every N closes
+
   // ─── Darwinian Signal Weighting ───────
   darwin: {
     enabled: u.darwinEnabled ?? true,
