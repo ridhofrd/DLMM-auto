@@ -20,7 +20,7 @@ import {
   minutesOutOfRange,
   syncOpenPositions,
 } from "../state.js";
-import { recordPerformance } from "../lessons.js";
+import { recordPerformance, recordDeployPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
 import { normalizeMint } from "./wallet.js";
 import { appendDecision } from "../decision-log.js";
@@ -400,6 +400,21 @@ export async function deployPosition({
           active_bin: activeBin.binId,
           initial_value_usd,
         });
+
+        recordDeployPerformance({
+          position: positionAddress,
+          pool: pool_address,
+          pool_name,
+          strategy: activeStrategy,
+          bin_range: { min: minBinId, max: maxBinId, bins_below: activeBinsBelow, bins_above: activeBinsAbove },
+          bin_step,
+          volatility,
+          fee_tvl_ratio,
+          organic_score,
+          amount_sol: finalAmountY,
+          amount_x: finalAmountX,
+          initial_value_usd,
+        });
       }
 
       appendDecision({
@@ -532,6 +547,21 @@ export async function deployPosition({
       amount_sol: finalAmountY,
       amount_x: finalAmountX,
       active_bin: activeBin.binId,
+      initial_value_usd,
+    });
+
+    recordDeployPerformance({
+      position: newPosition.publicKey.toString(),
+      pool: pool_address,
+      pool_name,
+      strategy: activeStrategy,
+      bin_range: { min: minBinId, max: maxBinId, bins_below: activeBinsBelow, bins_above: activeBinsAbove },
+      bin_step,
+      volatility,
+      fee_tvl_ratio,
+      organic_score,
+      amount_sol: finalAmountY,
+      amount_x: finalAmountX,
       initial_value_usd,
     });
 

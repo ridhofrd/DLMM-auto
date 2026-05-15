@@ -432,14 +432,39 @@ export async function runScreeningCycle({ silent = false } = {}) {
   timers.screeningLastRun = Date.now();
   log("cron", `Starting screening cycle [model: ${config.llm.screeningModel}]`);
 
-    // Capture market conditions at screening time
-    try {
-      const { takeMarketSnapshot } = await import("./market-snapshot.js");
-      await takeMarketSnapshot({ trigger: "screening_cycle" });
-    } catch (snapErr) {
-      log("snapshot_warn", `Market snapshot failed: ${snapErr.message}`);
-    }
+  // Capture market conditions at screening time
+  try {
+    const { takeMarketSnapshot } = await import("./market-snapshot.js");
+    const snap = await takeMarketSnapshot({ trigger: "screening_cycle" });
 
+    // --- BEARISH TREND GUARD ---
+    if (config.screening.trendGuardEnabled && snap?.trending_pools?.length > 0) {
+      const poolsToAnalyze = Math.min(config.screening.trendGuardPoolsToAnalyze, snap.trending_pools.length);
+      const pools = snap.trending_pools.slice(0, poolsToAnalyze);
+      const upPools = pools.filter(p => (p.price_change_pct || 0) > 0).length;
+      const trendUpPct = (upPools / pools.length) * 100;
+
+      if (trendUpPct < config.screening.trendGuardMinUpPct) {
+        log("cron", `Screening skipped — Bearish Trend Guard triggered (${trendUpPct.toFixed(0)}% pools UP < ${config.screening.trendGuardMinUpPct}%)`);
+        screenReport = `Screening skipped — Market trend is heavily bearish (${trendUpPct.toFixed(0)}% pools UP < ${config.screening.trendGuardMinUpPct}% required).`;
+        appendDecision({
+          type: "skip",
+          actor: "SCREENER",
+          summary: "Bearish Trend Guard triggered",
+          reason: `Only ${trendUpPct.toFixed(0)}% of top ${pools.length} trending pools are moving UP in price (Requires ${config.screening.trendGuardMinUpPct}%).`,
+        });
+        _screeningBusy = false;
+
+        if (!silent && telegramEnabled()) {
+          const { sendMessage } = await import("./telegram.js");
+          await sendMessage(`⛔ <b> Skipping deployment because the overall market is crashing.\n\nOnly <b>${trendUpPct.toFixed(0)}%</b> of the top ${pools.length} trending pools are moving UP in price.\n<i>(Requires ${config.screening.trendGuardMinUpPct}%)</i>`, { parse_mode: "HTML" }).catch(() => { });
+        }
+        return screenReport;
+      }
+    }
+  } catch (snapErr) {
+    log("snapshot_warn", `Market snapshot failed: ${snapErr.message}`);
+  }
   try {
     // Reuse pre-fetched balance — no extra RPC call needed
     const currentBalance = preBalance;

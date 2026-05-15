@@ -72,6 +72,9 @@ export const config = {
     minTokenAgeHours: u.minTokenAgeHours ?? null, // null = no minimum
     maxTokenAgeHours: u.maxTokenAgeHours ?? null, // null = no maximum
     athFilterPct: u.athFilterPct ?? null, // e.g. -20 = only deploy if price is >= 20% below ATH
+    trendGuardEnabled: u.trendGuardEnabled ?? true,
+    trendGuardMinUpPct: u.trendGuardMinUpPct ?? 50,
+    trendGuardPoolsToAnalyze: u.trendGuardPoolsToAnalyze ?? 15,
   },
 
   // ─── Position Management ────────────────

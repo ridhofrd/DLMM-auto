@@ -199,6 +199,21 @@ export async function recordPerformance(perf) {
 }
 
 /**
+ * Call this when a position is deployed. Captures the initial deploy conditions
+ * into the performance array so you have a timeline of entries vs exits.
+ */
+export function recordDeployPerformance(perf) {
+  const data = load();
+  const entry = {
+    ...perf,
+    status: "DEPLOY",
+    recorded_at: new Date().toISOString(),
+  };
+  data.performance.push(entry);
+  save(data);
+}
+
+/**
  * Derive a lesson from a closed position's performance.
  * Only generates a lesson if the outcome was clearly good or bad.
  */
