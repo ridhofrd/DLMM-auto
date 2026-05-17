@@ -3,7 +3,7 @@ import cron from "node-cron";
 import readline from "readline";
 import { agentLoop } from "./agent.js";
 import { log } from "./logger.js";
-import { getMyPositions, closePosition, getActiveBin } from "./tools/dlmm.js";
+import { getMyPositions, closePosition, getActiveBin, claimFees } from "./tools/dlmm.js";
 import { getWalletBalances, swapToken } from "./tools/wallet.js";
 import { getTopCandidates } from "./tools/screening.js";
 import { config, reloadScreeningThresholds, computeDeployAmount, getDynamicTakeProfitPct } from "./config.js";
@@ -307,46 +307,95 @@ export async function runManagementCycle({ silent = false } = {}) {
     mgmtReport = reportLines.join("\n\n") +
       `\n\nLaporan sekarang bos: 💼 ${positions.length} posisi | ${cur}${totalValue.toFixed(4)} | ${actionSummary}`;
 
-    // ── Call LLM only if action needed ──────────────────────────────
+    // ── Execute Actions ──────────────────────────────
     const actionPositions = positionData.filter(p => {
       const a = actionMap.get(p.position);
       return a.action !== "STAY";
     });
 
     if (actionPositions.length > 0) {
-      log("cron", `Management: ${actionPositions.length} action(s) needed — invoking LLM [model: ${config.llm.managementModel}]`);
+      const llmActionPositions = actionPositions.filter(p => actionMap.get(p.position).action === "INSTRUCTION");
+      const directActionPositions = actionPositions.filter(p => actionMap.get(p.position).action !== "INSTRUCTION");
 
-      const actionBlocks = actionPositions.map((p) => {
-        const act = actionMap.get(p.position);
-        return [
-          `POSITION: ${p.pair} (${p.position})`,
-          `  pool: ${p.pool}`,
-          `  action: ${act.action}${act.rule && act.rule !== "exit" ? ` — Rule ${act.rule}: ${act.reason}` : ""}${act.rule === "exit" ? ` — ⚡ Trailing TP: ${act.reason}` : ""}`,
-          `  pnl_pct: ${p.pnl_pct}% | unclaimed_fees: ${cur}${p.unclaimed_fees_usd} | value: ${cur}${p.total_value_usd} | fee_per_tvl_24h: ${p.fee_per_tvl_24h ?? "?"}%`,
-          `  bins: lower=${p.lower_bin} upper=${p.upper_bin} active=${p.active_bin} | oor_minutes: ${p.minutes_out_of_range ?? 0}`,
-          p.instruction ? `  instruction: "${p.instruction}"` : null,
-        ].filter(Boolean).join("\n");
-      }).join("\n\n");
+      if (directActionPositions.length > 0) {
+        log("cron", `Management: ${directActionPositions.length} direct action(s) needed — executing via JS`);
+        let directReport = [];
+        for (const p of directActionPositions) {
+          const act = actionMap.get(p.position);
+          if (act.action === "CLOSE") {
+            log("cron", `Executing direct CLOSE for ${p.pair}: ${act.reason}`);
+            try {
+              await liveMessage?.toolStart("close_position");
+              const result = await closePosition({ position_address: p.position, reason: act.reason });
+              let msg = `[CLOSE] ${p.pair}: ${result.success ? "Success" : "Failed - " + result.error}`;
+              // Auto-swap base token back to SOL
+              if (result.success && result.base_mint) {
+                try {
+                  const bal = await getWalletBalances();
+                  const token = bal.tokens?.find(t => t.mint === result.base_mint);
+                  if (token && token.usd >= 0.10) {
+                    log("state", `[Management] Auto-swapping ${token.symbol || result.base_mint.slice(0, 8)} ($${token.usd.toFixed(2)}) → SOL`);
+                    await swapToken({ input_mint: result.base_mint, output_mint: "SOL", amount: token.balance });
+                    msg += ` (Auto-swapped ${token.symbol || "token"} → SOL)`;
+                  }
+                } catch (swapErr) {
+                  log("state", `[Management] Auto-swap failed: ${swapErr.message}`);
+                }
+              }
+              await liveMessage?.toolFinish("close_position", result, result.success);
+              directReport.push(msg);
+            } catch (e) {
+              await liveMessage?.toolFinish("close_position", e.message, false);
+              directReport.push(`[CLOSE] ${p.pair}: Failed - ${e.message}`);
+            }
+          } else if (act.action === "CLAIM") {
+            log("cron", `Executing direct CLAIM for ${p.pair}`);
+            try {
+              await liveMessage?.toolStart("claim_fees");
+              const result = await claimFees({ position_address: p.position });
+              await liveMessage?.toolFinish("claim_fees", result, result.success);
+              directReport.push(`[CLAIM] ${p.pair}: ${result.success ? "Success" : "Failed - " + result.error}`);
+            } catch (e) {
+              await liveMessage?.toolFinish("claim_fees", e.message, false);
+              directReport.push(`[CLAIM] ${p.pair}: Failed - ${e.message}`);
+            }
+          }
+        }
+        mgmtReport += `\n\n**Direct Actions Executed:**\n` + directReport.join("\n");
+      }
 
-      const { content } = await agentLoop(`
-MANAGEMENT ACTION REQUIRED — ${actionPositions.length} position(s)
+      if (llmActionPositions.length > 0) {
+        log("cron", `Management: ${llmActionPositions.length} INSTRUCTION(s) needed — invoking LLM [model: ${config.llm.managementModel}]`);
+
+        const actionBlocks = llmActionPositions.map((p) => {
+          const act = actionMap.get(p.position);
+          return [
+            `POSITION: ${p.pair} (${p.position})`,
+            `  pool: ${p.pool}`,
+            `  action: ${act.action}`,
+            `  pnl_pct: ${p.pnl_pct}% | unclaimed_fees: ${cur}${p.unclaimed_fees_usd} | value: ${cur}${p.total_value_usd} | fee_per_tvl_24h: ${p.fee_per_tvl_24h ?? "?"}%`,
+            `  bins: lower=${p.lower_bin} upper=${p.upper_bin} active=${p.active_bin} | oor_minutes: ${p.minutes_out_of_range ?? 0}`,
+            p.instruction ? `  instruction: "${p.instruction}"` : null,
+          ].filter(Boolean).join("\n");
+        }).join("\n\n");
+
+        const { content } = await agentLoop(`
+MANAGEMENT ACTION REQUIRED — ${llmActionPositions.length} position(s)
 
 ${actionBlocks}
 
 RULES:
-- CLOSE: call close_position only — it handles fee claiming internally, do NOT call claim_fees first
-- CLAIM: call claim_fees with position address
-- INSTRUCTION: evaluate the instruction condition. If met → close_position. If not → HOLD, do nothing.
-- ⚡ exit alerts: close immediately, no exceptions
+- INSTRUCTION: evaluate the instruction condition. If met → call close_position. If not → HOLD, do nothing.
 
-Execute the required actions. Do NOT re-evaluate CLOSE/CLAIM — rules already applied. Just execute.
+Execute the required actions.
 After executing, write a brief one-line result per position.
-      `, config.llm.maxSteps, [], "MANAGER", config.llm.managementModel, 2048, {
-        onToolStart: async ({ name }) => { await liveMessage?.toolStart(name); },
-        onToolFinish: async ({ name, result, success }) => { await liveMessage?.toolFinish(name, result, success); },
-      });
+        `, config.llm.maxSteps, [], "MANAGER", config.llm.managementModel, 2048, {
+          onToolStart: async ({ name }) => { await liveMessage?.toolStart(name); },
+          onToolFinish: async ({ name, result, success }) => { await liveMessage?.toolFinish(name, result, success); },
+        });
 
-      mgmtReport += `\n\n${content}`;
+        mgmtReport += `\n\n**LLM Actions:**\n${content}`;
+      }
     } else {
       log("cron", "Management: all positions STAY — skipping LLM");
       await liveMessage?.note("No tool actions needed.");
@@ -432,13 +481,13 @@ export async function runScreeningCycle({ silent = false } = {}) {
   timers.screeningLastRun = Date.now();
   log("cron", `Starting screening cycle [model: ${config.llm.screeningModel}]`);
 
-    // Capture market conditions at screening time
-    try {
-      const { takeMarketSnapshot } = await import("./market-snapshot.js");
-      await takeMarketSnapshot({ trigger: "screening_cycle" });
-    } catch (snapErr) {
-      log("snapshot_warn", `Market snapshot failed: ${snapErr.message}`);
-    }
+  // Capture market conditions at screening time
+  try {
+    const { takeMarketSnapshot } = await import("./market-snapshot.js");
+    await takeMarketSnapshot({ trigger: "screening_cycle" });
+  } catch (snapErr) {
+    log("snapshot_warn", `Market snapshot failed: ${snapErr.message}`);
+  }
 
   try {
     // Reuse pre-fetched balance — no extra RPC call needed
