@@ -448,13 +448,148 @@ export async function notifyDeploy({
   );
 }
 
-export async function notifyClose({ pair, pnlUsd, pnlPct }) {
-  if (hasActiveLiveMessage()) return;
-  const sign = pnlUsd >= 0 ? "+" : "";
-  await sendHTML(
-    `🔒 <b>Closed</b> ${pair}\n` +
-    `PnL: ${sign}$${(pnlUsd ?? 0).toFixed(2)} (${sign}${(pnlPct ?? 0).toFixed(2)}%)`
-  );
+function fmtMoney(value, solMode = false) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "?";
+  const sign = n >= 0 ? "+" : "";
+  if (solMode) return `${sign}◎${Math.abs(n).toFixed(4)}`;
+  return `${sign}$${n.toFixed(2)}`;
+}
+
+function fmtPctLine(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "PnL %: <i>pending / unavailable</i>";
+  const sign = n >= 0 ? "+" : "";
+  return `PnL %: <b>${sign}${n.toFixed(2)}%</b>`;
+}
+
+function describeCloseTrigger(reason) {
+  const r = String(reason || "").toLowerCase();
+  if (r.includes("emergency stop")) return "Emergency stop-loss poller (fast)";
+  if (r.includes("take profit") && r.includes("poller")) return "Take-profit poller (30s)";
+  if (r.includes("(poller)")) return "Exit poller (30s) — trailing TP, stop-loss, OOR, or low yield";
+  if (r.includes("trailing tp") || r.includes("trailing take")) return "Trailing take-profit";
+  if (r === "stop loss" || r.includes("stop loss:") || r.includes("stop-loss")) return "Stop-loss rule";
+  if (r.includes("take profit") || r === "take profit") return "Take-profit rule";
+  if (r.includes("low yield")) return "Low fee/TVL yield rule";
+  if (r.includes("pumped far above") || r.includes("pumped above")) return "Price pumped above LP range";
+  if (r.includes("out of range") || r === "oor" || r.endsWith(" oor")) return "Out-of-range (OOR) rule";
+  if (r.includes("telegram") || r.includes("manual")) return "Manual close (Telegram / operator)";
+  if (r.includes("instruction")) return "Custom position instruction";
+  if (r.includes("agent decision")) return "Agent / tool decision";
+  return "Automated management";
+}
+
+function formatTxList(txs) {
+  if (!txs?.length) return null;
+  return txs.map((t) => `<code>${escapeHtml(String(t).slice(0, 20))}…</code>`).join(" ");
+}
+
+/**
+ * Verbose Telegram alert for any position close (JS direct or LLM via executor).
+ * Always sends when Telegram is configured (not suppressed by live management UI).
+ */
+export async function notifyPositionClose({
+  pair,
+  pool,
+  position,
+  reason,
+  pnlUsd,
+  pnlPct,
+  preClosePnlPct,
+  feesUsd,
+  minutesHeld,
+  minutesOOR,
+  initialValueUsd,
+  finalValueUsd,
+  closeTxs,
+  claimTxs,
+  relay,
+  solMode = false,
+}) {
+  if (!TOKEN || !chatId) return;
+
+  const trigger = describeCloseTrigger(reason);
+  const cur = solMode ? "◎" : "$";
+  const lines = [
+    `🔒 <b>POSITION CLOSED</b>`,
+    ``,
+    `<b>Pair:</b> ${escapeHtml(pair || "unknown")}`,
+    `<b>Why:</b> ${escapeHtml(reason || "unspecified")}`,
+    `<b>Trigger:</b> ${escapeHtml(trigger)}`,
+    ``,
+    fmtPctLine(pnlPct),
+  ];
+
+  if (Number.isFinite(preClosePnlPct) && preClosePnlPct !== pnlPct) {
+    lines.push(`PnL % at signal: <b>${preClosePnlPct >= 0 ? "+" : ""}${preClosePnlPct.toFixed(2)}%</b>`);
+  }
+
+  if (Number.isFinite(pnlUsd)) {
+    lines.push(`PnL ${cur === "◎" ? "value" : "USD"}: <b>${fmtMoney(pnlUsd, solMode)}</b>`);
+  }
+
+  if (Number.isFinite(feesUsd) && feesUsd > 0) {
+    lines.push(`Fees earned: <b>${fmtMoney(feesUsd, solMode)}</b>`);
+  }
+
+  if (Number.isFinite(initialValueUsd) && initialValueUsd > 0) {
+    lines.push(`Deployed (approx): <b>${fmtMoney(initialValueUsd, solMode)}</b>`);
+  }
+  if (Number.isFinite(finalValueUsd) && finalValueUsd > 0) {
+    lines.push(`Withdrawn (approx): <b>${fmtMoney(finalValueUsd, solMode)}</b>`);
+  }
+
+  const holdParts = [];
+  if (minutesHeld != null) holdParts.push(`held ${minutesHeld}m`);
+  if (minutesOOR != null && minutesOOR > 0) holdParts.push(`OOR ${minutesOOR}m`);
+  if (holdParts.length) lines.push(`Time: ${holdParts.join(" | ")}`);
+
+  lines.push(``);
+  if (pool) lines.push(`Pool: <code>${escapeHtml(pool)}</code>`);
+  if (position) lines.push(`Position: <code>${escapeHtml(position)}</code>`);
+  if (relay) lines.push(`Execution: LPAgent relay`);
+  const claimStr = formatTxList(claimTxs);
+  const closeStr = formatTxList(closeTxs);
+  if (claimStr) lines.push(`Claim tx: ${claimStr}`);
+  if (closeStr) lines.push(`Close tx: ${closeStr}`);
+
+  await sendHTML(lines.join("\n"));
+}
+
+export async function notifyPositionCloseFailed({
+  pair,
+  position,
+  pool,
+  reason,
+  error,
+  preClosePnlPct,
+  solMode = false,
+}) {
+  if (!TOKEN || !chatId) return;
+
+  const lines = [
+    `❌ <b>POSITION CLOSE FAILED</b>`,
+    ``,
+    `<b>Pair:</b> ${escapeHtml(pair || "unknown")}`,
+    `<b>Intended reason:</b> ${escapeHtml(reason || "unspecified")}`,
+    `<b>Trigger:</b> ${escapeHtml(describeCloseTrigger(reason))}`,
+  ];
+
+  if (Number.isFinite(preClosePnlPct)) {
+    lines.push(fmtPctLine(preClosePnlPct));
+  }
+
+  lines.push(`<b>Error:</b> ${escapeHtml(error || "unknown error")}`);
+  if (pool) lines.push(`Pool: <code>${escapeHtml(pool)}</code>`);
+  if (position) lines.push(`Position: <code>${escapeHtml(position)}</code>`);
+
+  await sendHTML(lines.join("\n"));
+}
+
+/** @deprecated Use notifyPositionClose — kept for callers passing minimal fields */
+export async function notifyClose({ pair, pnlUsd, pnlPct, reason, position, pool }) {
+  return notifyPositionClose({ pair, pnlUsd, pnlPct, reason: reason || "agent decision", position, pool });
 }
 
 export async function notifySwap({ inputSymbol, outputSymbol, amountIn, amountOut, tx }) {

@@ -1116,6 +1116,73 @@ export async function claimFees({ position_address }) {
 }
 
 // ─── Close Position ────────────────────────────────────────────
+async function emitCloseTelegramAlert(payload) {
+  try {
+    const { notifyPositionClose, notifyPositionCloseFailed, isEnabled } = await import("../telegram.js");
+    if (!isEnabled()) return;
+    const solMode = !!config.management?.solMode;
+    const data = { ...payload, solMode };
+    if (data.success === false) {
+      await notifyPositionCloseFailed(data);
+    } else {
+      await notifyPositionClose(data);
+    }
+  } catch (error) {
+    log("telegram_warn", `Close alert failed: ${error.message}`);
+  }
+}
+
+async function finishClose(result, ctx) {
+  await emitCloseTelegramAlert({
+    success: result.success !== false,
+    pair: result.pool_name || ctx.tracked?.pool_name || ctx.poolMeta?.name || ctx.position_address?.slice(0, 8),
+    pool: result.pool || ctx.poolAddress,
+    position: result.position || ctx.position_address,
+    reason: ctx.reason || "unspecified",
+    pnlUsd: result.pnl_usd,
+    pnlPct: result.pnl_pct,
+    preClosePnlPct: ctx.preCloseSnapshot?.pnl_pct,
+    feesUsd: ctx.feesUsd,
+    minutesHeld: ctx.minutesHeld,
+    minutesOOR: ctx.minutesOOR,
+    initialValueUsd: ctx.initialValueUsd,
+    finalValueUsd: ctx.finalValueUsd,
+    closeTxs: result.close_txs || result.txs,
+    claimTxs: result.claim_txs,
+    relay: result.relay,
+    error: result.error,
+  });
+  return result;
+}
+
+function buildCloseCtx({
+  reason,
+  position_address,
+  tracked,
+  poolMeta,
+  poolAddress,
+  preCloseSnapshot,
+  minutesHeld,
+  minutesOOR,
+  feesUsd,
+  initialValueUsd,
+  finalValueUsd,
+}) {
+  return {
+    reason: reason || "agent decision",
+    position_address,
+    tracked,
+    poolMeta,
+    poolAddress,
+    preCloseSnapshot,
+    minutesHeld,
+    minutesOOR,
+    feesUsd,
+    initialValueUsd,
+    finalValueUsd,
+  };
+}
+
 export async function closePosition({ position_address, reason }) {
   position_address = normalizeMint(position_address);
   if (process.env.DRY_RUN === "true") {
@@ -1123,6 +1190,13 @@ export async function closePosition({ position_address, reason }) {
   }
 
   const tracked = getTrackedPosition(position_address);
+  let preCloseSnapshot = null;
+  try {
+    const snap = await getMyPositions({ force: true, silent: true });
+    preCloseSnapshot = snap?.positions?.find((p) => p.position === position_address) ?? null;
+  } catch {
+    /* optional pre-close metrics for Telegram */
+  }
 
   try {
     log("close", `Closing position: ${position_address}`);
@@ -1208,14 +1282,15 @@ export async function closePosition({ position_address, reason }) {
       }
 
       if (!closedConfirmed) {
-        return {
+        return finishClose({
           success: false,
           error: "Close submit succeeded but position still appears open after verification window",
           position: position_address,
           pool: poolAddress,
+          pool_name: tracked?.pool_name || poolMeta?.name || null,
           close_txs: closeTxHashes,
           txs: txHashes,
-        };
+        }, buildCloseCtx({ reason, position_address, tracked, poolMeta, poolAddress, preCloseSnapshot }));
       }
 
       recordClose(position_address, reason || "agent decision");
@@ -1295,7 +1370,7 @@ export async function closePosition({ position_address, reason }) {
           },
         });
 
-        return {
+        return finishClose({
           success: true,
           relay: true,
           request_id: order.requestId,
@@ -1308,7 +1383,19 @@ export async function closePosition({ position_address, reason }) {
           pnl_usd: pnlUsd,
           pnl_pct: pnlPct,
           base_mint: livePosition?.base_mint || null,
-        };
+        }, buildCloseCtx({
+          reason,
+          position_address,
+          tracked,
+          poolMeta,
+          poolAddress,
+          preCloseSnapshot,
+          minutesHeld,
+          minutesOOR,
+          feesUsd,
+          initialValueUsd: initialUsd,
+          finalValueUsd,
+        }));
       }
 
       appendDecision({
@@ -1322,7 +1409,7 @@ export async function closePosition({ position_address, reason }) {
         metrics: {},
       });
 
-      return {
+      return finishClose({
         success: true,
         relay: true,
         request_id: order.requestId,
@@ -1333,7 +1420,9 @@ export async function closePosition({ position_address, reason }) {
         close_txs: closeTxHashes,
         txs: txHashes,
         base_mint: livePosition?.base_mint || null,
-      };
+        pnl_pct: preCloseSnapshot?.pnl_pct,
+        pnl_usd: preCloseSnapshot?.pnl_true_usd ?? preCloseSnapshot?.pnl_usd,
+      }, buildCloseCtx({ reason, position_address, tracked, poolMeta, poolAddress, preCloseSnapshot }));
     }
 
     // Clear cached pool so SDK loads fresh position fee state
@@ -1452,15 +1541,16 @@ export async function closePosition({ position_address, reason }) {
     }
 
     if (!closedConfirmed) {
-      return {
+      return finishClose({
         success: false,
         error: "Close transactions sent but position still appears open after verification window",
         position: position_address,
         pool: poolAddress,
+        pool_name: tracked?.pool_name || poolMeta?.name || null,
         claim_txs: claimTxHashes,
         close_txs: closeTxHashes,
         txs: txHashes,
-      };
+      }, buildCloseCtx({ reason, position_address, tracked, poolMeta, poolAddress, preCloseSnapshot }));
     }
 
     recordClose(position_address, reason || "agent decision");
@@ -1584,7 +1674,7 @@ export async function closePosition({ position_address, reason }) {
         },
       });
 
-      return {
+      return finishClose({
         success: true,
         position: position_address,
         pool: poolAddress,
@@ -1595,7 +1685,19 @@ export async function closePosition({ position_address, reason }) {
         pnl_usd: pnlUsd,
         pnl_pct: pnlPct,
         base_mint: pool.lbPair.tokenXMint.toString(),
-      };
+      }, buildCloseCtx({
+        reason,
+        position_address,
+        tracked,
+        poolMeta,
+        poolAddress,
+        preCloseSnapshot,
+        minutesHeld,
+        minutesOOR,
+        feesUsd,
+        initialValueUsd: initialUsd,
+        finalValueUsd,
+      }));
     }
 
     appendDecision({
@@ -1609,7 +1711,7 @@ export async function closePosition({ position_address, reason }) {
       metrics: {},
     });
 
-    return {
+    return finishClose({
       success: true,
       position: position_address,
       pool: poolAddress,
@@ -1618,10 +1720,22 @@ export async function closePosition({ position_address, reason }) {
       close_txs: closeTxHashes,
       txs: txHashes,
       base_mint: pool.lbPair.tokenXMint.toString(),
-    };
+      pnl_pct: preCloseSnapshot?.pnl_pct,
+      pnl_usd: preCloseSnapshot?.pnl_true_usd ?? preCloseSnapshot?.pnl_usd,
+    }, buildCloseCtx({ reason, position_address, tracked, poolMeta, poolAddress, preCloseSnapshot }));
   } catch (error) {
     log("close_error", error.message);
-    return { success: false, error: error.message };
+    return finishClose(
+      { success: false, error: error.message, position: position_address },
+      buildCloseCtx({
+        reason,
+        position_address,
+        tracked,
+        poolMeta: null,
+        poolAddress: null,
+        preCloseSnapshot,
+      }),
+    );
   }
 }
 

@@ -13,6 +13,8 @@
     "dev": "DRY_RUN=true node index.js",
     "test:screen": "node test/test-screening.js",
     "test:agent": "DRY_RUN=true node test/test-agent.js",
+    "llm-pool": "node scripts/llm-pool/cli.js",
+    "llm-pool:daemon": "node scripts/llm-pool/daemon.js",
     "postinstall": "node scripts/patch-anchor.js"
   },
   "knip": {

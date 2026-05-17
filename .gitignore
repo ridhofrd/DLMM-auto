@@ -43,6 +43,14 @@ docs/
 # Discord listener queue
 discord-signals.json
 
+# llm-pool secrets & runtime
+scripts/llm-pool/accounts.pool.json
+scripts/llm-pool/llm-pool.config.json
+scripts/llm-pool/llm-pool.config.local.json
+scripts/llm-pool/llm-pool.state.json
+scripts/llm-pool/llm-pool.log
+scripts/llm-pool/.rotate.lock
+
 # Playwright MCP browser logs
 .playwright-mcp/
 

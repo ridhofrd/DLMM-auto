@@ -326,7 +326,10 @@ export async function runManagementCycle({ silent = false } = {}) {
             log("cron", `Executing direct CLOSE for ${p.pair}: ${act.reason}`);
             try {
               await liveMessage?.toolStart("close_position");
-              const result = await closePosition({ position_address: p.position, reason: act.reason });
+              const result = await closePosition({
+                position_address: p.position,
+                reason: formatCloseReasonForAlert(act, p),
+              });
               let msg = `[CLOSE] ${p.pair}: ${result.success ? "Success" : "Failed - " + result.error}`;
               // Auto-swap base token back to SOL
               if (result.success && result.base_mint) {
@@ -824,11 +827,10 @@ Summarize the current portfolio health, total fees earned, and performance of al
           }
           log("state", `[PnL poll] 🎯 Take profit triggered for ${p.pair}: PnL ${p.pnl_pct}% >= ${tpThreshold}% — closing NOW`);
           try {
-            const closeResult = await closePosition({ position_address: p.position, reason: `take profit (poller): PnL ${p.pnl_pct}% >= ${tpThreshold}%` });
-            let msg = closeResult.success
-              ? `Take Profit Boss: ${p.pair}\nPnL: ${p.pnl_pct}% (threshold: ${tpThreshold}%)\nResult: closed successfully`
-              : `Take Profit Failed Boss: ${p.pair}\nPnL: ${p.pnl_pct}%\nError: ${JSON.stringify(closeResult)}`;
-            // Auto-swap base token back to SOL
+            const closeResult = await closePosition({
+              position_address: p.position,
+              reason: `Take profit (poller): PnL ${p.pnl_pct}% >= threshold ${tpThreshold}%`,
+            });
             if (closeResult.success && closeResult.base_mint) {
               try {
                 const bal = await getWalletBalances();
@@ -836,21 +838,14 @@ Summarize the current portfolio health, total fees earned, and performance of al
                 if (token && token.usd >= 0.10) {
                   log("state", `[PnL poll] Auto-swapping ${token.symbol || closeResult.base_mint.slice(0, 8)} ($${token.usd.toFixed(2)}) → SOL`);
                   await swapToken({ input_mint: closeResult.base_mint, output_mint: "SOL", amount: token.balance });
-                  msg += `\nAuto-swapped ${token.symbol || "token"} → SOL`;
                 }
               } catch (swapErr) {
                 log("state", `[PnL poll] Auto-swap failed: ${swapErr.message}`);
               }
             }
-            log("state", msg);
-            if (telegramEnabled()) {
-              sendMessage(msg).catch(() => { });
-            }
+            log("state", `[PnL poll] Take profit close ${closeResult.success ? "ok" : "failed"} for ${p.pair}`);
           } catch (closeErr) {
             log("state", `[PnL poll] Take profit close failed for ${p.pair}: ${closeErr.message}`);
-            if (telegramEnabled()) {
-              sendMessage(`🎯 TAKE PROFIT ERROR: ${p.pair}\nPnL: ${p.pnl_pct}%\n${closeErr.message}`).catch(() => { });
-            }
           }
           continue;
         }
@@ -868,11 +863,10 @@ Summarize the current portfolio health, total fees earned, and performance of al
 
           log("state", `[PnL poll] 🎯 Exit alert for ${p.pair}: ${exit.reason} — closing NOW`);
           try {
-            const closeResult = await closePosition({ position_address: p.position, reason: `${exit.reason} (poller)` });
-            let msg = closeResult.success
-              ? `⚡ EXIT: ${p.pair}\n${exit.reason}\nResult: closed successfully`
-              : `⚡ EXIT FAILED: ${p.pair}\n${exit.reason}\nError: ${JSON.stringify(closeResult)}`;
-            // Auto-swap base token back to SOL
+            const closeResult = await closePosition({
+              position_address: p.position,
+              reason: `${exit.reason} (poller)`,
+            });
             if (closeResult.success && closeResult.base_mint) {
               try {
                 const bal = await getWalletBalances();
@@ -880,21 +874,14 @@ Summarize the current portfolio health, total fees earned, and performance of al
                 if (token && token.usd >= 0.10) {
                   log("state", `[PnL poll] Auto-swapping ${token.symbol || closeResult.base_mint.slice(0, 8)} ($${token.usd.toFixed(2)}) → SOL`);
                   await swapToken({ input_mint: closeResult.base_mint, output_mint: "SOL", amount: token.balance });
-                  msg += `\nAuto-swapped ${token.symbol || "token"} → SOL`;
                 }
               } catch (swapErr) {
                 log("state", `[PnL poll] Auto-swap failed: ${swapErr.message}`);
               }
             }
-            log("state", msg);
-            if (telegramEnabled()) {
-              sendMessage(msg).catch(() => { });
-            }
+            log("state", `[PnL poll] Exit close ${closeResult.success ? "ok" : "failed"} for ${p.pair}: ${exit.reason}`);
           } catch (closeErr) {
             log("state", `[PnL poll] Exit close failed for ${p.pair}: ${closeErr.message}`);
-            if (telegramEnabled()) {
-              sendMessage(`⚡ EXIT ERROR: ${p.pair}\n${exit.reason}\n${closeErr.message}`).catch(() => { });
-            }
           }
         }
 
@@ -937,11 +924,10 @@ Summarize the current portfolio health, total fees earned, and performance of al
         if (p.pnl_pct <= threshold) {
           log("emergency", `🚨 Emergency stop-loss triggered for ${p.pair}: PnL ${p.pnl_pct}% <= ${threshold}% — closing NOW`);
           try {
-            const closeResult = await closePosition({ position_address: p.position, reason: `emergency stop-loss: PnL ${p.pnl_pct}% <= ${threshold}%` });
-            let msg = closeResult.success
-              ? `🚨 EMERGENCY CLOSE: ${p.pair}\nPnL: ${p.pnl_pct}% (threshold: ${threshold}%)\nResult: closed successfully`
-              : `🚨 EMERGENCY CLOSE FAILED: ${p.pair}\nPnL: ${p.pnl_pct}%\nError: ${JSON.stringify(closeResult)}`;
-            // Auto-swap base token back to SOL
+            const closeResult = await closePosition({
+              position_address: p.position,
+              reason: `Emergency stop-loss: PnL ${p.pnl_pct}% <= threshold ${threshold}%`,
+            });
             if (closeResult.success && closeResult.base_mint) {
               try {
                 const bal = await getWalletBalances();
@@ -949,21 +935,14 @@ Summarize the current portfolio health, total fees earned, and performance of al
                 if (token && token.usd >= 0.10) {
                   log("emergency", `Auto-swapping ${token.symbol || closeResult.base_mint.slice(0, 8)} ($${token.usd.toFixed(2)}) → SOL`);
                   await swapToken({ input_mint: closeResult.base_mint, output_mint: "SOL", amount: token.balance });
-                  msg += `\nAuto-swapped ${token.symbol || "token"} → SOL`;
                 }
               } catch (swapErr) {
                 log("emergency", `Auto-swap after emergency close failed: ${swapErr.message}`);
               }
             }
-            log("emergency", msg);
-            if (telegramEnabled()) {
-              sendMessage(msg).catch(() => { });
-            }
+            log("emergency", `Emergency close ${closeResult.success ? "ok" : "failed"} for ${p.pair} PnL ${p.pnl_pct}%`);
           } catch (closeErr) {
             log("emergency", `Emergency close failed for ${p.pair}: ${closeErr.message}`);
-            if (telegramEnabled()) {
-              sendMessage(`🚨 EMERGENCY CLOSE ERROR: ${p.pair}\nPnL: ${p.pnl_pct}%\n${closeErr.message}`).catch(() => { });
-            }
           }
         }
       }
@@ -1034,6 +1013,17 @@ function formatCandidates(candidates) {
   ].join("\n");
 }
 
+function formatCloseReasonForAlert(act, position) {
+  const base =
+    act.rule === "exit"
+      ? act.reason
+      : act.rule != null
+        ? `Rule ${act.rule}: ${act.reason}`
+        : act.reason || "close";
+  if (position?.pnl_pct == null) return base;
+  return `${base} | PnL at signal: ${position.pnl_pct}%`;
+}
+
 function getDeterministicCloseRule(position, managementConfig) {
   const tracked = getTrackedPosition(position.position);
   const pnlSuspect = (() => {
@@ -1047,17 +1037,29 @@ function getDeterministicCloseRule(position, managementConfig) {
   })();
 
   if (!pnlSuspect && position.pnl_pct != null && position.pnl_pct <= managementConfig.stopLossPct) {
-    return { action: "CLOSE", rule: 1, reason: "stop loss" };
+    return {
+      action: "CLOSE",
+      rule: 1,
+      reason: `Stop loss: PnL ${position.pnl_pct}% <= limit ${managementConfig.stopLossPct}%`,
+    };
   }
   if (!pnlSuspect && position.pnl_pct != null && position.pnl_pct >= managementConfig.takeProfitPct) {
-    return { action: "CLOSE", rule: 2, reason: "take profit" };
+    return {
+      action: "CLOSE",
+      rule: 2,
+      reason: `Take profit: PnL ${position.pnl_pct}% >= target ${managementConfig.takeProfitPct}%`,
+    };
   }
   if (
     position.active_bin != null &&
     position.upper_bin != null &&
     position.active_bin > position.upper_bin + managementConfig.outOfRangeBinsToClose
   ) {
-    return { action: "CLOSE", rule: 3, reason: "pumped far above range" };
+    return {
+      action: "CLOSE",
+      rule: 3,
+      reason: `Pumped above range: active bin ${position.active_bin} > upper ${position.upper_bin} + ${managementConfig.outOfRangeBinsToClose} bins`,
+    };
   }
   if (
     position.active_bin != null &&
@@ -1065,14 +1067,22 @@ function getDeterministicCloseRule(position, managementConfig) {
     position.active_bin > position.upper_bin &&
     (position.minutes_out_of_range ?? 0) >= managementConfig.outOfRangeWaitMinutes
   ) {
-    return { action: "CLOSE", rule: 4, reason: "OOR" };
+    return {
+      action: "CLOSE",
+      rule: 4,
+      reason: `Out of range (OOR): ${position.minutes_out_of_range ?? 0}m >= ${managementConfig.outOfRangeWaitMinutes}m limit`,
+    };
   }
   if (
     position.fee_per_tvl_24h != null &&
     position.fee_per_tvl_24h < managementConfig.minFeePerTvl24h &&
     (position.age_minutes ?? 0) >= 60
   ) {
-    return { action: "CLOSE", rule: 5, reason: "low yield" };
+    return {
+      action: "CLOSE",
+      rule: 5,
+      reason: `Low yield: fee/TVL ${position.fee_per_tvl_24h}% < min ${managementConfig.minFeePerTvl24h}% (age ${position.age_minutes ?? "?"}m)`,
+    };
   }
   return null;
 }
@@ -1346,12 +1356,11 @@ async function telegramHandler(msg) {
       if (idx < 0 || idx >= positions.length) { await sendMessage("Invalid number. Use /positions first."); return; }
       const pos = positions[idx];
       await sendMessage(`Closing ${pos.pair}...`);
-      const result = await closePosition({ position_address: pos.position });
-      if (result.success) {
-        const closeTxs = result.close_txs?.length ? result.close_txs : result.txs;
-        const claimNote = result.claim_txs?.length ? `\nClaim txs: ${result.claim_txs.join(", ")}` : "";
-        await sendMessage(`✅ Closed ${pos.pair}\nPnL: ${config.management.solMode ? "◎" : "$"}${result.pnl_usd ?? "?"} | close txs: ${closeTxs?.join(", ") || "n/a"}${claimNote}`);
-      } else {
+      const result = await closePosition({
+        position_address: pos.position,
+        reason: `Manual close via Telegram /close (index ${idx + 1})`,
+      });
+      if (!result.success) {
         await sendMessage(`❌ Close failed: ${JSON.stringify(result)}`);
       }
     } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
@@ -1366,7 +1375,10 @@ async function telegramHandler(msg) {
       const results = [];
       for (const pos of positions) {
         try {
-          const result = await closePosition({ position_address: pos.position });
+          const result = await closePosition({
+            position_address: pos.position,
+            reason: "Manual close via Telegram /closeall",
+          });
           results.push(`${pos.pair}: ${result.success ? "closed" : `failed (${result.error || "unknown"})`}`);
         } catch (error) {
           results.push(`${pos.pair}: failed (${error.message})`);
@@ -1673,12 +1685,11 @@ if (isTTY) {
         if (idx < 0 || idx >= positions.length) { await sendMessage(`Invalid number. Use /positions first.`); return; }
         const pos = positions[idx];
         await sendMessage(`Closing ${pos.pair}...`);
-        const result = await closePosition({ position_address: pos.position });
-        if (result.success) {
-          const closeTxs = result.close_txs?.length ? result.close_txs : result.txs;
-          const claimNote = result.claim_txs?.length ? `\nClaim txs: ${result.claim_txs.join(", ")}` : "";
-          await sendMessage(`✅ Closed ${pos.pair}\nPnL: ${config.management.solMode ? "◎" : "$"}${result.pnl_usd ?? "?"} | close txs: ${closeTxs?.join(", ") || "n/a"}${claimNote}`);
-        } else {
+        const result = await closePosition({
+          position_address: pos.position,
+          reason: `Manual close via Telegram /close (index ${idx + 1})`,
+        });
+        if (!result.success) {
           await sendMessage(`❌ Close failed: ${JSON.stringify(result)}`);
         }
       } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }

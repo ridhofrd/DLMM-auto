@@ -432,7 +432,7 @@ export async function executeTool(name, args) {
           gmgn_sm,
         }).catch(() => { });
       } else if (name === "close_position") {
-        notifyClose({ pair: result.pool_name || args.position_address?.slice(0, 8), pnlUsd: result.pnl_usd ?? 0, pnlPct: result.pnl_pct ?? 0 }).catch(() => { });
+        // Telegram close alert is sent from closePosition() in dlmm.js (verbose reason + PnL)
         // Note low-yield closes in pool memory so screener avoids redeploying
         if (args.reason && args.reason.toLowerCase().includes("yield")) {
           const poolAddr = result.pool || args.pool_address;
