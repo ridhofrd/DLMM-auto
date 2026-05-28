@@ -1,0 +1,20 @@
+{
+  "provider": "ollama",
+  "env_file": ".env",
+  "env_keys": ["LLM_API_KEY", "OLLAMA_API_KEY"],
+  "env_base_url_key": "LLM_BASE_URL",
+  "base_url": "https://ollama.com/api",
+  "selection_strategy": "round-robin",
+  "probe_interval_min": 15,
+  "probe_timeout_ms": 60000,
+  "probe_model": "gpt-oss:120b",
+  "max_retries_before_rotate": 2,
+  "cooldown_session_hours": 5,
+  "cooldown_weekly_days": 7,
+  "notify": {
+    "telegram": {
+      "bot_token": "",
+      "chat_id": ""
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_note": "Copy to accounts.pool.json and add real API keys. Never commit accounts.pool.json.",
+  "accounts": [
+    {
+      "id": "acc-01",
+      "label": "Ollama free #1",
+      "api_key": "YOUR_OLLAMA_API_KEY_HERE",
+      "tier": "free",
+      "priority": 10
+    },
+    {
+      "id": "acc-02",
+      "label": "Ollama backup",
+      "api_key": "YOUR_SECOND_API_KEY_HERE",
+      "tier": "free",
+      "priority": 20
+    }
+  ]
+}
