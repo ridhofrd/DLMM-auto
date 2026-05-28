@@ -72,6 +72,9 @@ export const config = {
     minTokenAgeHours: u.minTokenAgeHours ?? null, // null = no minimum
     maxTokenAgeHours: u.maxTokenAgeHours ?? null, // null = no maximum
     athFilterPct: u.athFilterPct ?? null, // e.g. -20 = only deploy if price is >= 20% below ATH
+    blockDeceleratingVolume: u.blockDeceleratingVolume ?? true,
+    volumeTrendThreshold: u.volumeTrendThreshold ?? 10,
+    volumeTrendTimeframe: u.volumeTrendTimeFrame ?? "1h",
   },
 
   // ─── Position Management ────────────────
@@ -255,5 +258,8 @@ export function reloadScreeningThresholds() {
     if (fresh.maxBotHoldersPct != null) s.maxBotHoldersPct = fresh.maxBotHoldersPct;
     if (fresh.allowedLaunchpads !== undefined) s.allowedLaunchpads = fresh.allowedLaunchpads;
     if (fresh.blockedLaunchpads !== undefined) s.blockedLaunchpads = fresh.blockedLaunchpads;
+    if (fresh.blockDeceleratingVolume !== undefined) s.blockDeceleratingVolume = fresh.blockDeceleratingVolume;
+    if (fresh.volumeTrendThreshold !== undefined) s.volumeTrendThreshold = fresh.volumeTrendThreshold;
+    if (fresh.volumeTrendTimeframe !== undefined) s.volumeTrendTimeframe = fresh.volumeTrendTimeframe;
   } catch { /* ignore */ }
 }

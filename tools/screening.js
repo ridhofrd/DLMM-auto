@@ -264,6 +264,18 @@ export async function discoverPools({
 }
 
 /**
+ * Calculate volume trend from OHLCV candle history.
+ * Compares sum of recent completed candles vs previous completed candles.
+ */
+function getVolumeTrend(volumeChangePct, threshold = 10) {
+  if (volumeChangePct == null) return "unknown";
+  if (volumeChangePct > threshold) return "accelerating";
+  if (volumeChangePct < -threshold) return "decelerating";
+  return "stable";
+}
+
+
+/**
  * Returns eligible pools for the agent to evaluate and pick from.
  * Hard filters applied in code, agent decides which to deploy into.
  */
@@ -420,6 +432,21 @@ export async function getTopCandidates({ limit = 10 } = {}) {
     eligible.splice(0, eligible.length, ...filtered);
     if (eligible.length < before) log("dev_blocklist", `Filtered ${before - eligible.length} pool(s) via OKX creator check`);
   }
+
+  //volume trend filter -- block decelerating pools
+  if (config.screening.blockDeceleratingVolume) {
+    const before = eligible.length;
+    eligible.splice(0, eligible.length, ...eligible.filter((p) => {
+      if (p.volume_trend === "decelerating") {
+        log("screening", `Volume filter: dropped ${p.name} — decelerating (${p.volume_change_pct}%)`);
+        pushFilteredReason(filteredOut, p, `decelerating volume (${p.volume_change_pct}%)`);
+        return false;
+      }
+      return true;
+    }));
+    if (eligible.length < before) log("screening", `Volume filter removed ${before - eligible.length} candidate(s)`);
+  }
+
 
   if (config.indicators.enabled && eligible.length > 0) {
     const confirmations = await Promise.all(

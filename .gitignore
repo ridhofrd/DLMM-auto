@@ -59,3 +59,6 @@ scripts/llm-pool/.rotate.lock
 
 user-config.json.original
 hivemind_research/
+
+#test scripts
+scripts/test_script/

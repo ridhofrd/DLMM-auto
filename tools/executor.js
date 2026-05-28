@@ -430,6 +430,7 @@ export async function executeTool(name, args) {
           binsAbove: result.bins_above ?? args.bins_above,
           gmgn_risk,
           gmgn_sm,
+          volumeTrend: args.volume_trend,
         }).catch(() => { });
       } else if (name === "close_position") {
         // Telegram close alert is sent from closePosition() in dlmm.js (verbose reason + PnL)

@@ -411,6 +411,7 @@ export async function notifyDeploy({
   binsAbove,
   gmgn_risk,
   gmgn_sm,
+  volumeTrend,
 }) {
   if (hasActiveLiveMessage()) return;
   const priceStr = priceRange
@@ -423,6 +424,7 @@ export async function notifyDeploy({
     ? `Bin step: ${binStep ?? "?"}  |  Base fee: ${baseFee != null ? baseFee + "%" : "?"}\n`
     : "";
   const stratStr = strategy ? `Strategy: <b>${escapeHtml(strategy)}</b>\n` : "";
+  const trendStr = volumeTrend ? `Volume trend: <b>${escapeHtml(volumeTrend)}</b>\n` : "";
   const binsStr =
     binsBelow != null || binsAbove != null
       ? `Bins: below <code>${binsBelow ?? 0}</code> / above <code>${binsAbove ?? 0}</code>\n`
@@ -437,6 +439,7 @@ export async function notifyDeploy({
   await sendHTML(
     `✅ <b>Deployed</b> ${escapeHtml(pair)}\n` +
     stratStr +
+    trendStr +
     binsStr +
     `Amount: ${escapeHtml(String(amountSol))} SOL\n` +
     priceStr +

@@ -27,6 +27,7 @@ const SIGNAL_NAMES = [
   "study_win_rate",
   "hive_consensus",
   "volatility",
+  "volume_trend",
 ];
 
 const DEFAULT_WEIGHTS = Object.fromEntries(SIGNAL_NAMES.map((s) => [s, 1.0]));
@@ -45,7 +46,7 @@ const HIGHER_IS_BETTER = new Set([
 const BOOLEAN_SIGNALS = new Set(["smart_wallets_present"]);
 
 // Categorical signals — compared by win rate across categories
-const CATEGORICAL_SIGNALS = new Set(["narrative_quality"]);
+const CATEGORICAL_SIGNALS = new Set(["narrative_quality", "volume_trend"]);
 
 // ─── Persistence ─────────────────────────────────────────────────
 
@@ -93,11 +94,11 @@ function saveWeights(data) {
  */
 export function recalculateWeights(perfData, cfg = {}) {
   const darwin = cfg.darwin || {};
-  const windowDays    = darwin.windowDays    ?? 60;
-  const minSamples    = darwin.minSamples    ?? 10;
-  const boostFactor   = darwin.boostFactor   ?? 1.05;
-  const decayFactor   = darwin.decayFactor   ?? 0.95;
-  const weightFloor   = darwin.weightFloor   ?? 0.3;
+  const windowDays = darwin.windowDays ?? 60;
+  const minSamples = darwin.minSamples ?? 10;
+  const boostFactor = darwin.boostFactor ?? 1.05;
+  const decayFactor = darwin.decayFactor ?? 0.95;
+  const weightFloor = darwin.weightFloor ?? 0.3;
   const weightCeiling = darwin.weightCeiling ?? 2.5;
 
   const data = loadWeights();
@@ -124,7 +125,7 @@ export function recalculateWeights(perfData, cfg = {}) {
   }
 
   // Classify wins and losses
-  const wins   = recent.filter((p) => (p.pnl_usd ?? 0) > 0);
+  const wins = recent.filter((p) => (p.pnl_usd ?? 0) > 0);
   const losses = recent.filter((p) => (p.pnl_usd ?? 0) <= 0);
 
   if (wins.length === 0 || losses.length === 0) {
@@ -147,9 +148,9 @@ export function recalculateWeights(perfData, cfg = {}) {
   }
 
   // Split into quartiles
-  const q1End    = Math.ceil(ranked.length * 0.25);
-  const q3Start  = Math.floor(ranked.length * 0.75);
-  const topQuartile    = new Set(ranked.slice(0, q1End).map(([name]) => name));
+  const q1End = Math.ceil(ranked.length * 0.25);
+  const q3Start = Math.floor(ranked.length * 0.75);
+  const topQuartile = new Set(ranked.slice(0, q1End).map(([name]) => name));
   const bottomQuartile = new Set(ranked.slice(q3Start).map(([name]) => name));
 
   // Apply boosts and decays
@@ -201,13 +202,13 @@ export function recalculateWeights(perfData, cfg = {}) {
 // ─── Lift Computation ────────────────────────────────────────────
 
 function computeLift(signal, wins, losses, minSamples) {
-  if (BOOLEAN_SIGNALS.has(signal))      return computeBooleanLift(signal, wins, losses, minSamples);
-  if (CATEGORICAL_SIGNALS.has(signal))  return computeCategoricalLift(signal, wins, losses, minSamples);
+  if (BOOLEAN_SIGNALS.has(signal)) return computeBooleanLift(signal, wins, losses, minSamples);
+  if (CATEGORICAL_SIGNALS.has(signal)) return computeCategoricalLift(signal, wins, losses, minSamples);
   return computeNumericLift(signal, wins, losses, minSamples);
 }
 
 function computeNumericLift(signal, wins, losses, minSamples) {
-  const winVals  = extractNumeric(signal, wins);
+  const winVals = extractNumeric(signal, wins);
   const lossVals = extractNumeric(signal, losses);
   if (winVals.length + lossVals.length < minSamples) return null;
   if (winVals.length === 0 || lossVals.length === 0) return null;
@@ -219,7 +220,7 @@ function computeNumericLift(signal, wins, losses, minSamples) {
   if (range === 0) return 0;
 
   const normalize = (v) => (v - min) / range;
-  const winMean  = mean(winVals.map(normalize));
+  const winMean = mean(winVals.map(normalize));
   const lossMean = mean(lossVals.map(normalize));
 
   return HIGHER_IS_BETTER.has(signal) ? winMean - lossMean : Math.abs(winMean - lossMean);
@@ -233,7 +234,7 @@ function computeBooleanLift(signal, wins, losses, minSamples) {
     const val = snap.signal_snapshot?.[signal];
     if (val === undefined || val === null) continue;
     if (val) { trueTotal++; if (w) trueWins++; }
-    else      { falseTotal++; if (w) falseWins++; }
+    else { falseTotal++; if (w) falseWins++; }
   }
 
   if (trueTotal + falseTotal < minSamples) return null;
@@ -293,7 +294,7 @@ export function getWeightsSummary() {
   for (const signal of sorted) {
     const val = w[signal] ?? 1.0;
     const label = interpretWeight(val);
-    const bar   = weightBar(val);
+    const bar = weightBar(val);
     lines.push(`  ${signal.padEnd(24)} ${val.toFixed(2)}  ${bar}  ${label}`);
   }
 
@@ -315,7 +316,7 @@ function interpretWeight(val) {
 }
 
 function weightBar(val) {
-  const filled  = Math.round(((val - 0.3) / (2.5 - 0.3)) * 10);
+  const filled = Math.round(((val - 0.3) / (2.5 - 0.3)) * 10);
   const clamped = Math.max(0, Math.min(10, filled));
   return "#".repeat(clamped) + ".".repeat(10 - clamped);
 }
