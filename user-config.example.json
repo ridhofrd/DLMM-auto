@@ -24,6 +24,7 @@
   "blockDeceleratingVolume": true,
   "volumeTrendThreshold": 10,
   "volumeTrendTimeframe": "1h",
+  "enablePoolObservation": true,
   "observationWindowMin": 15,
   "accelerationThresholdPct": 0,
   "minVolume": 500,

@@ -205,7 +205,7 @@ export async function runManagementCycle({ silent = false } = {}) {
       if (trackedPools.length === 0) return "";
       return "\n\nSedang dipantau (" + trackedPools.length + "):\n" + trackedPools.map(p => {
         const ageMs = Date.now() - new Date(p.first_seen_at).getTime();
-        return `🔭 ${p.pool_name}: ${(ageMs/60000).toFixed(1)}m / ${config.screening.observationWindowMin}m`;
+        return `🔭 ${p.pool_name}: ${(ageMs / 60000).toFixed(1)}m / ${config.screening.observationWindowMin}m`;
       }).join("\n");
     };
 
@@ -454,10 +454,11 @@ export async function runScreeningCycle({ silent = false } = {}) {
   let prePositions, preBalance;
   let liveMessage = null;
   let screenReport = null;
+  let trackedPools = [];
   try {
     const { getTrackedPools } = await import("./tools/pool-tracker.js");
     [prePositions, preBalance] = await Promise.all([getMyPositions({ force: true }), getWalletBalances()]);
-    const trackedPools = getTrackedPools();
+    trackedPools = getTrackedPools();
     const totalConsumedSlots = prePositions.total_positions + trackedPools.length;
 
     if (totalConsumedSlots >= config.risk.maxPositions) {
@@ -567,23 +568,6 @@ export async function runScreeningCycle({ silent = false } = {}) {
       return true;
     });
 
-    if (passing.length === 0) {
-      const combined = filteredOut.length > 0 ? filteredOut : earlyFilteredExamples;
-      const combinedExamples = combined.slice(0, 3)
-        .map((entry) => `- ${entry.name}: ${entry.reason}`)
-        .join("\n");
-      screenReport = combinedExamples
-        ? `No candidates available.\nFiltered examples:\n${combinedExamples}`
-        : `No candidates available (all filtered by launchpad / holder-quality rules).`;
-      appendDecision({
-        type: "no_deploy",
-        actor: "SCREENER",
-        summary: "No candidates available",
-        reason: combinedExamples || "All candidates filtered before deploy",
-        rejected: combined.slice(0, 5).map((entry) => `${entry.name}: ${entry.reason}`),
-      });
-      return screenReport;
-    }
 
     // Pre-fetch active_bin for all passing candidates in parallel
     const activeBinResults = await Promise.allSettled(
@@ -670,28 +654,78 @@ export async function runScreeningCycle({ silent = false } = {}) {
 
     // Evaluate tracked pools
     const trackedPoolBlocks = [];
-    const { getPoolDetail } = await import("./tools/screening.js");
-    for (const p of trackedPools) {
-      const ageMs = Date.now() - new Date(p.first_seen_at).getTime();
-      const ageMin = ageMs / (1000 * 60);
-      if (ageMin >= config.screening.observationWindowMin) {
-        try {
-          const detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
-          const newVcp = detail.volume_change_pct ?? 0;
-          const delta = newVcp - p.initial_volume_change_pct;
-          trackedPoolBlocks.push(
-            `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
-            `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
-            `  current_vcp: ${newVcp}%\n` +
-            `  delta: ${delta.toFixed(2)}%\n` +
-            `  threshold_required: ${config.screening.accelerationThresholdPct}%\n` +
-            `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
-            `  action_required: If delta >= threshold_required, call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${delta.toFixed(2)}%'. If delta < threshold_required, call discard_tracked_pool.`
-          );
-        } catch (e) {
-          log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
+    if (config.screening.enablePoolObservation) {
+      const { getPoolDetail } = await import("./tools/screening.js");
+      for (const p of trackedPools) {
+        const ageMs = Date.now() - new Date(p.first_seen_at).getTime();
+        const ageMin = ageMs / (1000 * 60);
+        if (ageMin >= config.screening.observationWindowMin) {
+          try {
+            const detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
+            const newVcp = detail.volume_change_pct ?? 0;
+            const delta = newVcp - p.initial_volume_change_pct;
+            trackedPoolBlocks.push(
+              `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
+              `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
+              `  current_vcp: ${newVcp}%\n` +
+              `  delta: ${delta.toFixed(2)}%\n` +
+              `  threshold_required: ${config.screening.accelerationThresholdPct}%\n` +
+              `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
+              `  action_required: If delta >= threshold_required, call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${delta.toFixed(2)}%'. If delta < threshold_required, call discard_tracked_pool.`
+            );
+          } catch (e) {
+            log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
+          }
         }
       }
+    }
+
+    if (passing.length === 0 && trackedPoolBlocks.length === 0) {
+      const combined = filteredOut.length > 0 ? filteredOut : earlyFilteredExamples;
+      const combinedExamples = combined.slice(0, 3)
+        .map((entry) => `- ${entry.name}: ${entry.reason}`)
+        .join("\n");
+      screenReport = combinedExamples
+        ? `No candidates available.\nFiltered examples:\n${combinedExamples}`
+        : `No candidates available (all filtered by launchpad / holder-quality rules).`;
+      appendDecision({
+        type: "no_deploy",
+        actor: "SCREENER",
+        summary: "No candidates available",
+        reason: combinedExamples || "All candidates filtered before deploy",
+        rejected: combined.slice(0, 5).map((entry) => `${entry.name}: ${entry.reason}`),
+      });
+      return screenReport;
+    }
+
+    let promptSteps = "";
+    if (config.screening.enablePoolObservation) {
+      promptSteps = `STEPS:
+1. First, check if there are TRACKED POOLS READY FOR EVALUATION.
+   - If a tracked pool's delta >= threshold_required, call deploy_position using its exact original_deploy_args and stop. (Include 'volume_trend' = 'Accelerated by +X%')
+   - If a tracked pool's delta < threshold_required, call discard_tracked_pool.
+2. If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
+   - If there are candidates available, evaluate them and pick ONE best candidate.
+   - If there are NO candidates available, report ⛔ NO DEPLOY and stop.
+3. For the chosen candidate, decide whether to queue it for observation OR deploy it immediately:
+   - Call queue_for_tracking (MUST include 'volume_change_pct' and 'llm_reasoning').
+   - OR call deploy_position (if immediate deployment is warranted).
+4. When calling queue_for_tracking or deploy_position for a new candidate, calculate bins_below:
+   bins_below = round((35*1.5) + (volatility/5)*55) clamped to [35,200].
+   For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.
+5. Report your final action in this exact format (no tables, no extra sections):
+   🔭 QUEUED FOR OBSERVATION (or 🚀 DEPLOYED or ⛔ NO DEPLOY)`;
+    } else {
+      promptSteps = `STEPS:
+1. Check the PRE-LOADED CANDIDATES.
+   - If there are candidates available, evaluate them and pick ONE best candidate.
+   - If there are NO candidates available, report ⛔ NO DEPLOY and stop.
+2. Call deploy_position to deploy the chosen pool.
+3. When calling deploy_position, calculate bins_below:
+   bins_below = round((35*1.5) + (volatility/5)*55) clamped to [35,200].
+   For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.
+4. Report your final action in this exact format (no tables, no extra sections):
+   🚀 DEPLOYED (or ⛔ NO DEPLOY)`;
     }
 
     const { content } = await agentLoop(`
@@ -700,19 +734,9 @@ ${strategyBlock}
 Positions: ${prePositions.total_positions}/${config.risk.maxPositions} | SOL: ${currentBalance.sol.toFixed(3)} | Deploy: ${deployAmount} SOL
 
 ${trackedPoolBlocks.length > 0 ? `TRACKED POOLS READY FOR EVALUATION:\n${trackedPoolBlocks.join("\n\n")}\n\n` : ""}PRE-LOADED CANDIDATES (${passing.length} pools):
-${candidateBlocks.join("\n\n")}
+${candidateBlocks.length > 0 ? candidateBlocks.join("\n\n") : "(No pre-loaded candidates available)"}
 
-STEPS:
-1. If there are TRACKED POOLS READY FOR EVALUATION, evaluate them first based on their delta vs threshold.
-2. If no tracked pools were deployed, pick the best candidate from PRE-LOADED CANDIDATES.
-3. Call queue_for_tracking to observe the candidate, OR call deploy_position if it's ready for immediate deployment.
-   bins_below = round((35*1.5) + (volatility/5)*55) clamped to [35,200].
-   For single-side SOL deploys, do not invent upside:
-   set amount_y only, keep amount_x = 0, keep bins_above = 0.
-   IMPORTANT: For deploy_position of a tracked pool, set 'volume_trend' to the acceleration reason (e.g. 'Accelerated by +X%').
-   IMPORTANT: For queue_for_tracking, you MUST include 'volume_change_pct' and 'llm_reasoning'.
-4. Report in this exact format (no tables, no extra sections):
-   🔭 QUEUED FOR OBSERVATION (or 🚀 DEPLOYED)
+${promptSteps}
 
    <pool name>
    <pool address>

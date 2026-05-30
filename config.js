@@ -75,6 +75,7 @@ export const config = {
     blockDeceleratingVolume: u.blockDeceleratingVolume ?? true,
     volumeTrendThreshold: u.volumeTrendThreshold ?? 10,
     volumeTrendTimeframe: u.volumeTrendTimeFrame ?? "1h",
+    enablePoolObservation: u.enablePoolObservation ?? true,
     observationWindowMin: u.observationWindowMin ?? 15,
     accelerationThresholdPct: u.accelerationThresholdPct ?? 0,
   },

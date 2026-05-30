@@ -69,7 +69,14 @@ const INTENT_PATTERNS = [
 
 function getToolsForRole(agentType, goal = "") {
   if (agentType === "MANAGER") return tools.filter(t => MANAGER_TOOLS.has(t.function.name));
-  if (agentType === "SCREENER") return tools.filter(t => SCREENER_TOOLS.has(t.function.name));
+  if (agentType === "SCREENER") {
+    return tools.filter(t => {
+      if (!config.screening?.enablePoolObservation && (t.function.name === "queue_for_tracking" || t.function.name === "discard_tracked_pool")) {
+        return false;
+      }
+      return SCREENER_TOOLS.has(t.function.name);
+    });
+  }
 
   // GENERAL: match intent from goal, combine matched tool sets
   const matched = new Set();
