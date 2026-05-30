@@ -199,9 +199,19 @@ export async function runManagementCycle({ silent = false } = {}) {
     const livePositions = await getMyPositions({ force: true }).catch(() => null);
     positions = livePositions?.positions || [];
 
+    const { getTrackedPools } = await import("./tools/pool-tracker.js");
+    const trackedPools = getTrackedPools();
+    const formatObs = () => {
+      if (trackedPools.length === 0) return "";
+      return "\n\nSedang dipantau (" + trackedPools.length + "):\n" + trackedPools.map(p => {
+        const ageMs = Date.now() - new Date(p.first_seen_at).getTime();
+        return `🔭 ${p.pool_name}: ${(ageMs/60000).toFixed(1)}m / ${config.screening.observationWindowMin}m`;
+      }).join("\n");
+    };
+
     if (positions.length === 0) {
       log("cron", "No open positions — triggering screening cycle");
-      mgmtReport = "gaada posisi bos";
+      mgmtReport = "gaada posisi bos" + formatObs();
       runScreeningCycle().catch((e) => log("cron_error", `Triggered screening failed: ${e.message}`));
       return mgmtReport;
     }
@@ -305,7 +315,7 @@ export async function runManagementCycle({ silent = false } = {}) {
     //   `\n\nLaporan sekarang bos: 💼 ${positions.length} posisi | ${cur}${totalValue.toFixed(4)} | fees: ${cur}${totalUnclaimed.toFixed(4)} | ${actionSummary}`;
 
     mgmtReport = reportLines.join("\n\n") +
-      `\n\nLaporan sekarang bos: 💼 ${positions.length} posisi | ${cur}${totalValue.toFixed(4)} | ${actionSummary}`;
+      `\n\nLaporan sekarang bos: 💼 ${positions.length} posisi | ${cur}${totalValue.toFixed(4)} | ${actionSummary}` + formatObs();
 
     // ── Execute Actions ──────────────────────────────
     const actionPositions = positionData.filter(p => {
@@ -445,15 +455,19 @@ export async function runScreeningCycle({ silent = false } = {}) {
   let liveMessage = null;
   let screenReport = null;
   try {
+    const { getTrackedPools } = await import("./tools/pool-tracker.js");
     [prePositions, preBalance] = await Promise.all([getMyPositions({ force: true }), getWalletBalances()]);
-    if (prePositions.total_positions >= config.risk.maxPositions) {
-      log("cron", `Screening skipped — max positions reached (${prePositions.total_positions}/${config.risk.maxPositions})`);
-      screenReport = `Screening skipped — max positions reached (${prePositions.total_positions}/${config.risk.maxPositions}).`;
+    const trackedPools = getTrackedPools();
+    const totalConsumedSlots = prePositions.total_positions + trackedPools.length;
+
+    if (totalConsumedSlots >= config.risk.maxPositions) {
+      log("cron", `Screening skipped — max positions reached (open: ${prePositions.total_positions}, tracked: ${trackedPools.length}) / ${config.risk.maxPositions}`);
+      screenReport = `Screening skipped — max positions reached (open: ${prePositions.total_positions}, tracked: ${trackedPools.length}) / ${config.risk.maxPositions}.`;
       appendDecision({
         type: "skip",
         actor: "SCREENER",
         summary: "Screening skipped",
-        reason: `Max positions reached (${prePositions.total_positions}/${config.risk.maxPositions})`,
+        reason: `Max positions reached (open: ${prePositions.total_positions}, tracked: ${trackedPools.length}) / ${config.risk.maxPositions}`,
       });
       _screeningBusy = false;
       return screenReport;
@@ -654,22 +668,51 @@ export async function runScreeningCycle({ silent = false } = {}) {
 
     const weightsSummary = config.darwin?.enabled ? getWeightsSummary() : null;
 
+    // Evaluate tracked pools
+    const trackedPoolBlocks = [];
+    const { getPoolDetail } = await import("./tools/screening.js");
+    for (const p of trackedPools) {
+      const ageMs = Date.now() - new Date(p.first_seen_at).getTime();
+      const ageMin = ageMs / (1000 * 60);
+      if (ageMin >= config.screening.observationWindowMin) {
+        try {
+          const detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
+          const newVcp = detail.volume_change_pct ?? 0;
+          const delta = newVcp - p.initial_volume_change_pct;
+          trackedPoolBlocks.push(
+            `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
+            `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
+            `  current_vcp: ${newVcp}%\n` +
+            `  delta: ${delta.toFixed(2)}%\n` +
+            `  threshold_required: ${config.screening.accelerationThresholdPct}%\n` +
+            `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
+            `  action_required: If delta >= threshold_required, call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${delta.toFixed(2)}%'. If delta < threshold_required, call discard_tracked_pool.`
+          );
+        } catch (e) {
+          log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
+        }
+      }
+    }
+
     const { content } = await agentLoop(`
 SCREENING CYCLE
 ${strategyBlock}
 Positions: ${prePositions.total_positions}/${config.risk.maxPositions} | SOL: ${currentBalance.sol.toFixed(3)} | Deploy: ${deployAmount} SOL
 
-PRE-LOADED CANDIDATES (${passing.length} pools):
+${trackedPoolBlocks.length > 0 ? `TRACKED POOLS READY FOR EVALUATION:\n${trackedPoolBlocks.join("\n\n")}\n\n` : ""}PRE-LOADED CANDIDATES (${passing.length} pools):
 ${candidateBlocks.join("\n\n")}
 
 STEPS:
-1. Pick the best candidate based on narrative quality, smart wallets, and pool metrics.
-2. Call deploy_position (active_bin is pre-fetched above — no need to call get_active_bin).
+1. If there are TRACKED POOLS READY FOR EVALUATION, evaluate them first based on their delta vs threshold.
+2. If no tracked pools were deployed, pick the best candidate from PRE-LOADED CANDIDATES.
+3. Call queue_for_tracking to observe the candidate, OR call deploy_position if it's ready for immediate deployment.
    bins_below = round((35*1.5) + (volatility/5)*55) clamped to [35,200].
    For single-side SOL deploys, do not invent upside:
-   set amount_y only, keep amount_x = 0, keep bins_above = 0, and let the upper bin stay at the active bin.
-3. Report in this exact format (no tables, no extra sections):
-   🚀 DEPLOYED
+   set amount_y only, keep amount_x = 0, keep bins_above = 0.
+   IMPORTANT: For deploy_position of a tracked pool, set 'volume_trend' to the acceleration reason (e.g. 'Accelerated by +X%').
+   IMPORTANT: For queue_for_tracking, you MUST include 'volume_change_pct' and 'llm_reasoning'.
+4. Report in this exact format (no tables, no extra sections):
+   🔭 QUEUED FOR OBSERVATION (or 🚀 DEPLOYED)
 
    <pool name>
    <pool address>

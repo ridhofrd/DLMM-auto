@@ -15,6 +15,7 @@ import { addLesson, clearAllLessons, clearPerformance, removeLessonsByKeyword, g
 import { setPositionInstruction } from "../state.js";
 
 import { getPoolMemory, addPoolNote } from "../pool-memory.js";
+import { queueForTracking } from "./pool-tracker.js";
 import { addStrategy, listStrategies, getStrategy, setActiveStrategy, removeStrategy } from "../strategy-library.js";
 import { addToBlacklist, removeFromBlacklist, listBlacklist } from "../token-blacklist.js";
 import { blockDev, unblockDev, listBlockedDevs } from "../dev-blocklist.js";
@@ -30,7 +31,7 @@ import { execSync, spawn } from "child_process";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USER_CONFIG_PATH = path.join(__dirname, "../user-config.json");
 import { log, logAction } from "../logger.js";
-import { notifyDeploy, notifyClose, notifySwap } from "../telegram.js";
+import { notifyDeploy, notifyClose, notifySwap, notifyQueueForTracking } from "../telegram.js";
 
 // Registered by index.js so update_config can restart cron jobs when intervals change
 let _cronRestarter = null;
@@ -105,6 +106,22 @@ const toolMap = {
   get_position_pnl: getPositionPnl,
   get_active_bin: getActiveBin,
   deploy_position: deployPosition,
+  queue_for_tracking: (args) => {
+    const { volume_change_pct, llm_reasoning, ...deploy_args } = args;
+    return queueForTracking({
+      pool_address: args.pool_address,
+      deploy_args,
+      initial_volume_change_pct: volume_change_pct,
+      llm_reasoning,
+      pool_name: args.pool_name || args.pool_address.slice(0, 8),
+    });
+  },
+  discard_tracked_pool: async (args) => {
+    const { pool_address, reason } = args;
+    const { discardTrackedPool } = await import("./pool-tracker.js");
+    discardTrackedPool(pool_address);
+    return { success: true, message: `Discarded ${pool_address}. Reason: ${reason}` };
+  },
   get_my_positions: getMyPositions,
   get_wallet_positions: getWalletPositions,
   search_pools: searchPools,
@@ -344,6 +361,8 @@ const toolMap = {
 // Tools that modify on-chain state (need extra safety checks)
 const WRITE_TOOLS = new Set([
   "deploy_position",
+  "queue_for_tracking",
+  "discard_tracked_pool",
   "claim_fees",
   "close_position",
   "swap_token",
@@ -432,6 +451,23 @@ export async function executeTool(name, args) {
           gmgn_sm,
           volumeTrend: args.volume_trend,
         }).catch(() => { });
+
+        // Clean up from tracking queue if it was being tracked
+        try {
+          const { discardTrackedPool } = await import("./pool-tracker.js");
+          discardTrackedPool(args.pool_address);
+        } catch (e) { /* ignore */ }
+      } else if (name === "queue_for_tracking") {
+        notifyQueueForTracking({
+          pair: result.pool_name || args.pool_name || args.pool_address?.slice(0, 8),
+          pool: args.pool_address,
+          amountSol: args.amount_y ?? args.amount_sol ?? 0,
+          strategy: args.strategy,
+          binsBelow: args.bins_below,
+          binsAbove: args.bins_above,
+          initialVolumeChangePct: args.volume_change_pct,
+          llmReasoning: args.llm_reasoning,
+        }).catch(() => { });
       } else if (name === "close_position") {
         // Telegram close alert is sent from closePosition() in dlmm.js (verbose reason + PnL)
         // Note low-yield closes in pool memory so screener avoids redeploying
@@ -495,7 +531,8 @@ export async function executeTool(name, args) {
  */
 async function runSafetyChecks(name, args) {
   switch (name) {
-    case "deploy_position": {
+    case "deploy_position":
+    case "queue_for_tracking": {
       // Reject pools with bin_step out of configured range
       const minStep = config.screening.minBinStep;
       const maxStep = config.screening.maxBinStep;
@@ -506,21 +543,27 @@ async function runSafetyChecks(name, args) {
         };
       }
 
-      // Check position count limit + duplicate pool guard — force fresh scan to avoid stale cache
+      // Check position count limit + duplicate pool guard
       const positions = await getMyPositions({ force: true });
-      if (positions.total_positions >= config.risk.maxPositions) {
+      const trackedPools = import.meta.url ? (await import("./pool-tracker.js")).getTrackedPools() : [];
+      const totalConsumedSlots = positions.total_positions + trackedPools.length;
+
+      if (totalConsumedSlots >= config.risk.maxPositions) {
         return {
           pass: false,
-          reason: `Max positions (${config.risk.maxPositions}) reached. Close a position first.`,
+          reason: `Max positions (${config.risk.maxPositions}) reached (open: ${positions.total_positions}, tracked: ${trackedPools.length}). Close a position or wait for tracked pools.`,
         };
       }
       const alreadyInPool = positions.positions.some(
         (p) => p.pool === args.pool_address
       );
-      if (alreadyInPool) {
+      const alreadyTracked = trackedPools.some(
+        (p) => p.pool_address === args.pool_address
+      );
+      if (alreadyInPool || alreadyTracked) {
         return {
           pass: false,
-          reason: `Already have an open position in pool ${args.pool_address}. Cannot open duplicate.`,
+          reason: `Already have an open or tracked position in pool ${args.pool_address}. Cannot open duplicate.`,
         };
       }
 

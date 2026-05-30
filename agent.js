@@ -5,7 +5,7 @@ import { executeTool } from "./tools/executor.js";
 import { tools } from "./tools/definitions.js";
 
 const MANAGER_TOOLS = new Set(["close_position", "claim_fees", "swap_token", "get_position_pnl", "get_my_positions", "get_wallet_balance"]);
-const SCREENER_TOOLS = new Set(["deploy_position", "get_active_bin", "get_top_candidates", "check_smart_wallets_on_pool", "get_token_holders", "get_token_narrative", "get_token_info", "search_pools", "get_pool_memory", "get_wallet_balance", "get_my_positions", "get_gmgn_token_analysis"]);
+const SCREENER_TOOLS = new Set(["deploy_position", "queue_for_tracking", "discard_tracked_pool", "get_active_bin", "get_top_candidates", "check_smart_wallets_on_pool", "get_token_holders", "get_token_narrative", "get_token_info", "search_pools", "get_pool_memory", "get_wallet_balance", "get_my_positions", "get_gmgn_token_analysis"]);
 const GENERAL_INTENT_ONLY_TOOLS = new Set([
   "self_update",
   "update_config",
@@ -29,7 +29,7 @@ const GENERAL_INTENT_ONLY_TOOLS = new Set([
 // Intent → tool subsets for GENERAL role
 const INTENT_TOOLS = {
   decisions: new Set(["get_recent_decisions"]),
-  deploy: new Set(["deploy_position", "get_top_candidates", "get_active_bin", "get_pool_memory", "check_smart_wallets_on_pool", "get_token_holders", "get_token_narrative", "get_token_info", "search_pools", "get_wallet_balance", "get_my_positions", "add_pool_note"]),
+  deploy: new Set(["deploy_position", "queue_for_tracking", "get_top_candidates", "get_active_bin", "get_pool_memory", "check_smart_wallets_on_pool", "get_token_holders", "get_token_narrative", "get_token_info", "search_pools", "get_wallet_balance", "get_my_positions", "add_pool_note"]),
   close: new Set(["close_position", "get_my_positions", "get_position_pnl", "get_wallet_balance", "swap_token"]),
   claim: new Set(["claim_fees", "get_my_positions", "get_position_pnl", "get_wallet_balance"]),
   swap: new Set(["swap_token", "get_wallet_balance"]),
@@ -179,9 +179,9 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
 
   // Track write tools fired this session — prevent the model from calling the same
   // destructive tool twice (e.g. deploy twice, swap twice after auto-swap)
-  const ONCE_PER_SESSION = new Set(["deploy_position", "swap_token", "close_position"]);
+  const ONCE_PER_SESSION = new Set(["deploy_position", "queue_for_tracking", "discard_tracked_pool", "swap_token", "close_position"]);
   // These lock after first attempt regardless of success — retrying them is always wrong
-  const NO_RETRY_TOOLS = new Set(["deploy_position"]);
+  const NO_RETRY_TOOLS = new Set(["deploy_position", "queue_for_tracking", "discard_tracked_pool"]);
   const firedOnce = new Set();
   const mustUseRealTool = shouldRequireRealToolUse(goal, agentType, interactive);
   let sawToolCall = false;

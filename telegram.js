@@ -451,6 +451,35 @@ export async function notifyDeploy({
   );
 }
 
+export async function notifyQueueForTracking({
+  pair,
+  pool,
+  amountSol,
+  strategy,
+  binsBelow,
+  binsAbove,
+  initialVolumeChangePct,
+  llmReasoning,
+}) {
+  if (hasActiveLiveMessage()) return;
+  const stratStr = strategy ? `Strategy: <b>${escapeHtml(strategy)}</b>\n` : "";
+  const binsStr =
+    binsBelow != null || binsAbove != null
+      ? `Bins: below <code>${binsBelow ?? 0}</code> / above <code>${binsAbove ?? 0}</code>\n`
+      : "";
+
+  await sendHTML(
+    `🔭 <b>Queued for Observation</b>\n\n` +
+    `<b>Pair:</b> ${escapeHtml(pair)}\n` +
+    `<b>Pool:</b> <code>${pool}</code>\n\n` +
+    stratStr +
+    binsStr +
+    `Amount: ${escapeHtml(String(amountSol))} SOL\n` +
+    `Baseline VCP: <b>${initialVolumeChangePct}%</b>\n\n` +
+    `<i>Reasoning:</i>\n${escapeHtml(llmReasoning || "Agent determined it has potential but needs volume confirmation.")}`
+  );
+}
+
 function fmtMoney(value, solMode = false) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "?";

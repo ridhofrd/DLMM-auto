@@ -197,6 +197,40 @@ WARNING: This executes a real on-chain transaction. Check DRY_RUN mode.`,
     }
   },
 
+  {
+    type: "function",
+    function: {
+      name: "queue_for_tracking",
+      description: `Queue a pool to be tracked for volume acceleration before deploying.
+Use this instead of deploy_position. It requires the exact same parameters as deploy_position, 
+but it delays the actual deployment until the volume change percentage accelerates.
+The pool will consume one slot of the maxPositions budget while being tracked.`,
+      parameters: {
+        type: "object",
+        properties: {
+          pool_address: { type: "string" },
+          amount_y: { type: "number" },
+          amount_x: { type: "number" },
+          amount_sol: { type: "number" },
+          strategy: { type: "string" },
+          bins_below: { type: "number" },
+          bins_above: { type: "number" },
+          pool_name: { type: "string" },
+          base_mint: { type: "string" },
+          bin_step: { type: "number" },
+          base_fee: { type: "number" },
+          volatility: { type: "number" },
+          fee_tvl_ratio: { type: "number" },
+          organic_score: { type: "number" },
+          volume_trend: { type: "string" },
+          volume_change_pct: { type: "number", description: "The current volume change pct at screening time. Required for baseline." },
+          llm_reasoning: { type: "string", description: "Why you chose this pool. Passed to tracking queue." }
+        },
+        required: ["pool_address", "volume_change_pct"]
+      }
+    }
+  },
+
   // ═══════════════════════════════════════════
   //  POSITION MANAGEMENT TOOLS
   // ═══════════════════════════════════════════
@@ -503,6 +537,23 @@ If no smart wallets are present, rely on fundamentals (fees, volume, organic sco
           pool_address: { type: "string", description: "Pool address to check" }
         },
         required: ["pool_address"]
+      }
+    }
+  },
+
+  {
+    type: "function",
+    function: {
+      name: "discard_tracked_pool",
+      description: `Discard a pool from the tracking queue if its volume acceleration is insufficient.
+Use this when evaluating tracked pools if their current volume change percentage hasn't improved by the required threshold compared to their baseline.`,
+      parameters: {
+        type: "object",
+        properties: {
+          pool_address: { type: "string", description: "Pool address to discard" },
+          reason: { type: "string", description: "Reason for discarding (e.g. 'Delta only +2%, threshold is 5%')" }
+        },
+        required: ["pool_address", "reason"]
       }
     }
   },

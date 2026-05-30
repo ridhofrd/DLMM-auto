@@ -75,6 +75,8 @@ export const config = {
     blockDeceleratingVolume: u.blockDeceleratingVolume ?? true,
     volumeTrendThreshold: u.volumeTrendThreshold ?? 10,
     volumeTrendTimeframe: u.volumeTrendTimeFrame ?? "1h",
+    observationWindowMin: u.observationWindowMin ?? 15,
+    accelerationThresholdPct: u.accelerationThresholdPct ?? 0,
   },
 
   // ─── Position Management ────────────────
@@ -261,5 +263,7 @@ export function reloadScreeningThresholds() {
     if (fresh.blockDeceleratingVolume !== undefined) s.blockDeceleratingVolume = fresh.blockDeceleratingVolume;
     if (fresh.volumeTrendThreshold !== undefined) s.volumeTrendThreshold = fresh.volumeTrendThreshold;
     if (fresh.volumeTrendTimeframe !== undefined) s.volumeTrendTimeframe = fresh.volumeTrendTimeframe;
+    if (fresh.observationWindowMin !== undefined) s.observationWindowMin = fresh.observationWindowMin;
+    if (fresh.accelerationThresholdPct !== undefined) s.accelerationThresholdPct = fresh.accelerationThresholdPct;
   } catch { /* ignore */ }
 }
