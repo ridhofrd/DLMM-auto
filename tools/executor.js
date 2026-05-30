@@ -120,6 +120,11 @@ const toolMap = {
     const { pool_address, reason } = args;
     const { discardTrackedPool } = await import("./pool-tracker.js");
     discardTrackedPool(pool_address);
+    const { sendLongPlainText, telegramEnabled } = await import("../telegram.js");
+    const { config } = await import("../config.js");
+    if (!config.dryRun && telegramEnabled()) {
+      sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${pool_address}\nDecision: ⛔ DISCARDED\nReason: ${reason}`).catch(() => {});
+    }
     return { success: true, message: `Discarded ${pool_address}. Reason: ${reason}` };
   },
   get_my_positions: getMyPositions,

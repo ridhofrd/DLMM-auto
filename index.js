@@ -678,6 +678,9 @@ export async function runScreeningCycle({ silent = false } = {}) {
             // If the pool is no longer found or fetch fails consistently after observation window, discard it to prevent getting stuck
             const { discardTrackedPool } = await import("./tools/pool-tracker.js");
             discardTrackedPool(p.pool_address);
+            if (!silent && telegramEnabled()) {
+              sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${p.pool_name}\nDecision: ⛔ DISCARDED\nReason: Failed to fetch pool data (likely dead/no TVL)`).catch(() => { });
+            }
           }
         }
       }
@@ -714,9 +717,10 @@ export async function runScreeningCycle({ silent = false } = {}) {
    - When calling queue_for_tracking, calculate bins_below: round((35*1.5) + (volatility/5)*55) clamped to [35,200]. For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.
 
 3. FINAL REPORTING:
-   - If you deployed a tracked pool, report: 🚀 DEPLOYED
-   - If you queued a new candidate, report: 🔭 QUEUED FOR OBSERVATION
-   - If you discarded tracked pools and there were NO new candidates to queue, report: ⛔ NO DEPLOY`;
+   - If you deployed a tracked pool, report: 🚀 DEPLOYED FROM OBSERVATION (explain why it passed)
+   - If you queued a new candidate, report: 🔭 QUEUED FOR OBSERVATION (explain why)
+   - If you discarded a tracked pool and there were NO new candidates to queue, report: ⛔ DISCARDED TRACKED POOL & NO DEPLOY
+   - If you had no tracked pools and no candidates, report: ⛔ NO DEPLOY`;
     } else {
       promptSteps = `STEPS:
 1. Check the PRE-LOADED CANDIDATES.
