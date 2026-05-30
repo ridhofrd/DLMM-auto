@@ -675,6 +675,9 @@ export async function runScreeningCycle({ silent = false } = {}) {
             );
           } catch (e) {
             log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
+            // If the pool is no longer found or fetch fails consistently after observation window, discard it to prevent getting stuck
+            const { discardTrackedPool } = await import("./tools/pool-tracker.js");
+            discardTrackedPool(p.pool_address);
           }
         }
       }
@@ -701,20 +704,19 @@ export async function runScreeningCycle({ silent = false } = {}) {
     let promptSteps = "";
     if (config.screening.enablePoolObservation) {
       promptSteps = `STEPS:
-1. First, check if there are TRACKED POOLS READY FOR EVALUATION.
-   - If a tracked pool's delta >= threshold_required, call deploy_position using its exact original_deploy_args and stop. (Include 'volume_trend' = 'Accelerated by +X%')
-   - If a tracked pool's delta < threshold_required, call discard_tracked_pool.
-2. If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
-   - If there are candidates available, evaluate them and pick ONE best candidate.
-   - If there are NO candidates available, report ⛔ NO DEPLOY and stop.
-3. For the chosen candidate, decide whether to queue it for observation OR deploy it immediately:
-   - Call queue_for_tracking (MUST include 'volume_change_pct' and 'llm_reasoning').
-   - OR call deploy_position (if immediate deployment is warranted).
-4. When calling queue_for_tracking or deploy_position for a new candidate, calculate bins_below:
-   bins_below = round((35*1.5) + (volatility/5)*55) clamped to [35,200].
-   For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.
-5. Report your final action in this exact format (no tables, no extra sections):
-   🔭 QUEUED FOR OBSERVATION (or 🚀 DEPLOYED or ⛔ NO DEPLOY)`;
+1. TRACKED POOLS FIRST: Check if there are TRACKED POOLS READY FOR EVALUATION.
+   - For EACH tracked pool, evaluate its delta:
+   - If delta >= threshold_required: You MUST call deploy_position using its exact original_deploy_args. Include 'volume_trend' = 'Accelerated by +X%'. Then stop (do not deploy anything else).
+   - If delta < threshold_required: You MUST call discard_tracked_pool to remove it from the queue. Do not skip this!
+
+2. NEW CANDIDATES: If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
+   - If there are candidates available, pick ONE best candidate. You MUST queue it for observation by calling queue_for_tracking (MUST include 'volume_change_pct' and 'llm_reasoning').
+   - When calling queue_for_tracking, calculate bins_below: round((35*1.5) + (volatility/5)*55) clamped to [35,200]. For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.
+
+3. FINAL REPORTING:
+   - If you deployed a tracked pool, report: 🚀 DEPLOYED
+   - If you queued a new candidate, report: 🔭 QUEUED FOR OBSERVATION
+   - If you discarded tracked pools and there were NO new candidates to queue, report: ⛔ NO DEPLOY`;
     } else {
       promptSteps = `STEPS:
 1. Check the PRE-LOADED CANDIDATES.
