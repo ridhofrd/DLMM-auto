@@ -574,6 +574,15 @@ async function runSafetyChecks(name, args) {
         };
       }
 
+      if (name === "deploy_position" && config.screening.enablePoolObservation) {
+        if (!alreadyTracked) {
+          return {
+            pass: false,
+            reason: `Strict pool observation is enabled. You CANNOT use deploy_position on new candidates. You MUST call queue_for_tracking first.`,
+          };
+        }
+      }
+
       // Check position count limit
       // If queueing a new pool, it consumes a new slot. 
       // If deploying an already tracked pool, it does NOT consume a new slot (it replaces the tracked slot).
