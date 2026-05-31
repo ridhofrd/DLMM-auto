@@ -461,18 +461,22 @@ export async function runScreeningCycle({ silent = false } = {}) {
     trackedPools = getTrackedPools();
     const totalConsumedSlots = prePositions.total_positions + trackedPools.length;
 
-    if (totalConsumedSlots >= config.risk.maxPositions) {
-      log("cron", `Screening skipped — max positions reached (open: ${prePositions.total_positions}, tracked: ${trackedPools.length}) / ${config.risk.maxPositions}`);
-      screenReport = `Screening skipped — max positions reached (open: ${prePositions.total_positions}, tracked: ${trackedPools.length}) / ${config.risk.maxPositions}.`;
+    // Only skip the cycle if OPEN positions are full. If we have tracked pools taking up slots, we must run the cycle to evaluate/deploy/discard them.
+    if (prePositions.total_positions >= config.risk.maxPositions) {
+      log("cron", `Screening skipped — max open positions reached (${prePositions.total_positions} / ${config.risk.maxPositions})`);
+      screenReport = `Screening skipped — max open positions reached (${prePositions.total_positions} / ${config.risk.maxPositions}).`;
       appendDecision({
         type: "skip",
         actor: "SCREENER",
         summary: "Screening skipped",
-        reason: `Max positions reached (open: ${prePositions.total_positions}, tracked: ${trackedPools.length}) / ${config.risk.maxPositions}`,
+        reason: `Max open positions reached (${prePositions.total_positions} / ${config.risk.maxPositions})`,
       });
       _screeningBusy = false;
       return screenReport;
     }
+    
+    // Check if we have slots for NEW candidates
+    const noSlotsForNew = totalConsumedSlots >= config.risk.maxPositions;
     const minRequired = config.management.deployAmountSol + config.management.gasReserve;
     const isDryRun = process.env.DRY_RUN === "true";
     if (!isDryRun && preBalance.sol < minRequired) {
@@ -720,9 +724,11 @@ export async function runScreeningCycle({ silent = false } = {}) {
 1. TRACKED POOLS FIRST: Check if there are TRACKED POOLS READY FOR EVALUATION.
    - For EACH tracked pool, you MUST call deploy_position using its exact original_deploy_args. Include 'volume_trend' = 'Accelerated by +X%'. Then stop (do not deploy anything else).
 
-2. NEW CANDIDATES: If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
+2. NEW CANDIDATES: ${noSlotsForNew ? 
+   "You currently have NO open slots for new candidates (tracked pools are consuming them). DO NOT queue any new candidates. Report ⛔ NO DEPLOY." : 
+   `If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
    - If there are candidates available, pick ONE best candidate. You MUST queue it for observation by calling queue_for_tracking (MUST include 'volume_change_pct' and 'llm_reasoning').
-   - When calling queue_for_tracking, calculate bins_below: round((35*1.5) + (volatility/5)*55) clamped to [35,200]. For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.
+   - When calling queue_for_tracking, calculate bins_below: round((35*1.5) + (volatility/5)*55) clamped to [35,200]. For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.`}
 
 3. FINAL REPORTING:
    - If you deployed a tracked pool, report: 🚀 DEPLOYED FROM OBSERVATION (explain why it passed)

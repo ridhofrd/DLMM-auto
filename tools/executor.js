@@ -553,22 +553,35 @@ async function runSafetyChecks(name, args) {
       const trackedPools = import.meta.url ? (await import("./pool-tracker.js")).getTrackedPools() : [];
       const totalConsumedSlots = positions.total_positions + trackedPools.length;
 
-      if (totalConsumedSlots >= config.risk.maxPositions) {
-        return {
-          pass: false,
-          reason: `Max positions (${config.risk.maxPositions}) reached (open: ${positions.total_positions}, tracked: ${trackedPools.length}). Close a position or wait for tracked pools.`,
-        };
-      }
       const alreadyInPool = positions.positions.some(
         (p) => p.pool === args.pool_address
       );
       const alreadyTracked = trackedPools.some(
         (p) => p.pool_address === args.pool_address
       );
-      if (alreadyInPool || alreadyTracked) {
+
+      if (alreadyInPool) {
         return {
           pass: false,
-          reason: `Already have an open or tracked position in pool ${args.pool_address}. Cannot open duplicate.`,
+          reason: `Already have an open position in pool ${args.pool_address}. Cannot open duplicate.`,
+        };
+      }
+
+      if (name === "queue_for_tracking" && alreadyTracked) {
+        return {
+          pass: false,
+          reason: `Already tracking pool ${args.pool_address}. Cannot open duplicate.`,
+        };
+      }
+
+      // Check position count limit
+      // If queueing a new pool, it consumes a new slot. 
+      // If deploying an already tracked pool, it does NOT consume a new slot (it replaces the tracked slot).
+      const consumesNewSlot = !(name === "deploy_position" && alreadyTracked);
+      if (consumesNewSlot && totalConsumedSlots >= config.risk.maxPositions) {
+        return {
+          pass: false,
+          reason: `Max positions (${config.risk.maxPositions}) reached (open: ${positions.total_positions}, tracked: ${trackedPools.length}). Close a position or wait for tracked pools.`,
         };
       }
 
