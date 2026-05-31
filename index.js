@@ -1400,6 +1400,34 @@ async function telegramHandler(msg) {
     return;
   }
 
+  if (text === "/tracked") {
+    try {
+      const { getTrackedPools } = await import("./tools/pool-tracker.js");
+      const tracked = getTrackedPools();
+      if (tracked.length === 0) { await sendMessage("No tracked pools."); return; }
+      const lines = tracked.map((p, i) => {
+        const dateStr = p.first_seen_at ? new Date(p.first_seen_at).toLocaleTimeString() : "?";
+        return `${i + 1}. ${p.pool_name || p.pool_address.slice(0, 8)} | ${p.pool_address.slice(0, 8)}... | baseline VCP: ${p.initial_volume_change_pct}% | queued: ${dateStr}`;
+      });
+      await sendMessage(`🔭 Tracked Pools (${tracked.length}):\n\n${lines.join("\n")}\n\n/deque <n> to remove`);
+    } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
+    return;
+  }
+
+  const dequeMatch = text.match(/^\/deque\s+(\d+)$/i);
+  if (dequeMatch) {
+    try {
+      const idx = parseInt(dequeMatch[1]) - 1;
+      const { getTrackedPools, discardTrackedPool } = await import("./tools/pool-tracker.js");
+      const tracked = getTrackedPools();
+      if (idx < 0 || idx >= tracked.length) { await sendMessage("Invalid number. Use /tracked first."); return; }
+      const pos = tracked[idx];
+      discardTrackedPool(pos.pool_address);
+      await sendMessage(`✅ Removed ${pos.pool_name || pos.pool_address.slice(0, 8)} from tracked pools.`);
+    } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
+    return;
+  }
+
   const poolMatch = text.match(/^\/pool\s+(\d+)$/i);
   if (poolMatch) {
     try {
@@ -1748,6 +1776,34 @@ if (isTTY) {
           return `${i + 1}. ${p.pair} | ${cur}${p.total_value_usd} | PnL: ${pnl} | fees: ${cur}${p.unclaimed_fees_usd} | ${age}${oor}${safety}`;
         });
         await sendMessage(`📊 Open Positions (${total_positions}):\n\n${lines.join("\n")}\n\n/close <n> to close | /set <n> <note> to set instruction`);
+      } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
+      return;
+    }
+
+    if (text === "/tracked") {
+      try {
+        const { getTrackedPools } = await import("./tools/pool-tracker.js");
+        const tracked = getTrackedPools();
+        if (tracked.length === 0) { await sendMessage("No tracked pools."); return; }
+        const lines = tracked.map((p, i) => {
+          const dateStr = p.first_seen_at ? new Date(p.first_seen_at).toLocaleTimeString() : "?";
+          return `${i + 1}. ${p.pool_name || p.pool_address.slice(0, 8)} | ${p.pool_address.slice(0, 8)}... | baseline VCP: ${p.initial_volume_change_pct}% | queued: ${dateStr}`;
+        });
+        await sendMessage(`🔭 Tracked Pools (${tracked.length}):\n\n${lines.join("\n")}\n\n/deque <n> to remove`);
+      } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
+      return;
+    }
+
+    const dequeMatch = text.match(/^\/deque\s+(\d+)$/i);
+    if (dequeMatch) {
+      try {
+        const idx = parseInt(dequeMatch[1]) - 1;
+        const { getTrackedPools, discardTrackedPool } = await import("./tools/pool-tracker.js");
+        const tracked = getTrackedPools();
+        if (idx < 0 || idx >= tracked.length) { await sendMessage("Invalid number. Use /tracked first."); return; }
+        const pos = tracked[idx];
+        discardTrackedPool(pos.pool_address);
+        await sendMessage(`✅ Removed ${pos.pool_name || pos.pool_address.slice(0, 8)} from tracked pools.`);
       } catch (e) { await sendMessage(`Error: ${e.message}`).catch(() => { }); }
       return;
     }

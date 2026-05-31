@@ -60,7 +60,27 @@ export function queueForTracking({ pool_address, deploy_args, initial_volume_cha
  */
 export function getTrackedPools() {
   const db = loadTracker();
-  return Object.values(db);
+  let changed = false;
+  const now = Date.now();
+  const TTL_MS = 4 * 60 * 60 * 1000; // 4 hours TTL
+
+  const validPools = [];
+  for (const [pool_address, data] of Object.entries(db)) {
+    const age = now - new Date(data.first_seen_at).getTime();
+    if (age > TTL_MS) {
+      delete db[pool_address];
+      changed = true;
+      log("pool-tracker", `Discarded ${pool_address} from tracking queue (exceeded 4h TTL).`);
+    } else {
+      validPools.push(data);
+    }
+  }
+
+  if (changed) {
+    saveTracker(db);
+  }
+
+  return validPools;
 }
 
 /**
