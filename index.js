@@ -664,15 +664,25 @@ export async function runScreeningCycle({ silent = false } = {}) {
             const detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
             const newVcp = detail.volume_change_pct ?? 0;
             const delta = newVcp - p.initial_volume_change_pct;
-            trackedPoolBlocks.push(
-              `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
-              `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
-              `  current_vcp: ${newVcp}%\n` +
-              `  delta: ${delta.toFixed(2)}%\n` +
-              `  threshold_required: ${config.screening.accelerationThresholdPct}%\n` +
-              `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
-              `  action_required: If delta >= threshold_required, call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${delta.toFixed(2)}%'. If delta < threshold_required, call discard_tracked_pool.`
-            );
+            
+            if (delta >= config.screening.accelerationThresholdPct) {
+              trackedPoolBlocks.push(
+                `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
+                `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
+                `  current_vcp: ${newVcp}%\n` +
+                `  delta: ${delta.toFixed(2)}%\n` +
+                `  threshold_required: ${config.screening.accelerationThresholdPct}%\n` +
+                `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
+                `  action_required: You MUST call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${delta.toFixed(2)}%'.`
+              );
+            } else {
+              log("screening", `Tracked pool ${p.pool_name} failed acceleration check (delta ${delta.toFixed(2)}% < ${config.screening.accelerationThresholdPct}%). Auto-discarding.`);
+              const { discardTrackedPool } = await import("./tools/pool-tracker.js");
+              discardTrackedPool(p.pool_address);
+              if (!silent && telegramEnabled()) {
+                sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${p.pool_name}\nDecision: ⛔ DISCARDED\nReason: Volume did not accelerate enough (${delta.toFixed(2)}% < ${config.screening.accelerationThresholdPct}% req)`).catch(() => { });
+              }
+            }
           } catch (e) {
             log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
             // If the pool is no longer found or fetch fails consistently after observation window, discard it to prevent getting stuck
@@ -708,9 +718,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
     if (config.screening.enablePoolObservation) {
       promptSteps = `STEPS:
 1. TRACKED POOLS FIRST: Check if there are TRACKED POOLS READY FOR EVALUATION.
-   - For EACH tracked pool, evaluate its delta:
-   - If delta >= threshold_required: You MUST call deploy_position using its exact original_deploy_args. Include 'volume_trend' = 'Accelerated by +X%'. Then stop (do not deploy anything else).
-   - If delta < threshold_required: You MUST call discard_tracked_pool to remove it from the queue. Do not skip this!
+   - For EACH tracked pool, you MUST call deploy_position using its exact original_deploy_args. Include 'volume_trend' = 'Accelerated by +X%'. Then stop (do not deploy anything else).
 
 2. NEW CANDIDATES: If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
    - If there are candidates available, pick ONE best candidate. You MUST queue it for observation by calling queue_for_tracking (MUST include 'volume_change_pct' and 'llm_reasoning').
@@ -719,7 +727,6 @@ export async function runScreeningCycle({ silent = false } = {}) {
 3. FINAL REPORTING:
    - If you deployed a tracked pool, report: 🚀 DEPLOYED FROM OBSERVATION (explain why it passed)
    - If you queued a new candidate, report: 🔭 QUEUED FOR OBSERVATION (explain why)
-   - If you discarded a tracked pool and there were NO new candidates to queue, report: ⛔ DISCARDED TRACKED POOL & NO DEPLOY
    - If you had no tracked pools and no candidates, report: ⛔ NO DEPLOY`;
     } else {
       promptSteps = `STEPS:

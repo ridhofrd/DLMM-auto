@@ -286,6 +286,10 @@ Sends notifications automatically for:
 | `/positions` | List open positions with progress bar |
 | `/close <n>` | Close position by list index |
 | `/set <n> <note>` | Set a note on a position |
+| `/tracked` | List pools currently queued for observation |
+| `/deque <n>` | Remove a tracked pool from the queue by list index |
+
+*Note: Tracked pools have an automatic 4-hour Time-To-Live (TTL). If they are not deployed or discarded by the agent within 4 hours, they are automatically removed from the queue to prevent them from permanently occupying a position slot.*
 
 You can also chat freely via Telegram using the same interface as the REPL.
 
