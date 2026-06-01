@@ -260,6 +260,25 @@ export async function runManagementCycle({ silent = false } = {}) {
         continue;
       }
 
+      // Volume Guard
+      const vg = config.management.volumeGuard;
+      if (vg?.enabled && (p.age_minutes ?? 0) >= vg.waitMinutes) {
+        try {
+          const { getPoolDetail } = await import("./tools/screening.js");
+          const detail = await getPoolDetail({ pool_address: p.pool, timeframe: vg.timeframe });
+          if (detail && detail.volume_change_pct != null && Number(detail.volume_change_pct) < vg.minVolumeChangePct) {
+            actionMap.set(p.position, { 
+              action: "CLOSE", 
+              rule: "volumeGuard", 
+              reason: `Volume trend decelerated below threshold (current: ${Number(detail.volume_change_pct).toFixed(1)}% < min: ${vg.minVolumeChangePct}%)` 
+            });
+            continue;
+          }
+        } catch (e) {
+          log("cron", `VolumeGuard fetch failed for ${p.pair}: ${e.message}`);
+        }
+      }
+
       const closeRule = getDeterministicCloseRule(p, config.management);
       if (closeRule) {
         actionMap.set(p.position, closeRule);
@@ -455,6 +474,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
   let liveMessage = null;
   let screenReport = null;
   let trackedPools = [];
+  let noSlotsForNew = false;
   try {
     const { getTrackedPools } = await import("./tools/pool-tracker.js");
     [prePositions, preBalance] = await Promise.all([getMyPositions({ force: true }), getWalletBalances()]);
@@ -476,7 +496,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
     }
     
     // Check if we have slots for NEW candidates
-    const noSlotsForNew = totalConsumedSlots >= config.risk.maxPositions;
+    noSlotsForNew = totalConsumedSlots >= config.risk.maxPositions;
     const minRequired = config.management.deployAmountSol + config.management.gasReserve;
     const isDryRun = process.env.DRY_RUN === "true";
     if (!isDryRun && preBalance.sol < minRequired) {

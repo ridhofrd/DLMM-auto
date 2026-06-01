@@ -67,6 +67,13 @@
   "pnlSanityMaxDiffPct": 5,
   "solMode": false,
 
+  "volumeGuard": {
+    "enabled": true,
+    "minVolumeChangePct": 5,
+    "waitMinutes": 30,
+    "timeframe": "1h"
+  },
+
   "managementIntervalMin": 10,
   "screeningIntervalMin": 30,
   "healthCheckIntervalMin": 60,

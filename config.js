@@ -106,7 +106,14 @@ export const config = {
     solMode: u.solMode ?? false,
     emergencyStopLossPct: u.emergencyStopLossPct ?? -1,   // close if PnL drops below this %
     emergencyPollIntervalSec: u.emergencyPollIntervalSec ?? 150,    // poll every N seconds (150 = 2.5 min)
+    volumeGuard: u.volumeGuard ?? {
+      enabled: false,
+      minVolumeChangePct: 5,
+      waitMinutes: 30,
+      timeframe: "1h"
+    },
   },
+
 
   // ─── Strategy Mapping ───────────────────
   strategy: {
