@@ -9,7 +9,7 @@ import { getTopCandidates } from "./tools/screening.js";
 import { config, reloadScreeningThresholds, computeDeployAmount, getDynamicTakeProfitPct } from "./config.js";
 import { evolveThresholds, getPerformanceSummary } from "./lessons.js";
 import { executeTool, registerCronRestarter } from "./tools/executor.js";
-import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage } from "./telegram.js";
+import { startPolling, stopPolling, sendMessage, sendHTML, notifyOutOfRange, isEnabled as telegramEnabled, createLiveMessage, sendLongPlainText } from "./telegram.js";
 import { generateBriefing } from "./briefing.js";
 import { getLastBriefingDate, setLastBriefingDate, getTrackedPosition, setPositionInstruction, updatePnlAndCheckExits, queuePeakConfirmation, resolvePendingPeak, queueTrailingDropConfirmation, resolvePendingTrailingDrop } from "./state.js";
 import { getActiveStrategy } from "./strategy-library.js";
@@ -267,10 +267,10 @@ export async function runManagementCycle({ silent = false } = {}) {
           const { getPoolDetail } = await import("./tools/screening.js");
           const detail = await getPoolDetail({ pool_address: p.pool, timeframe: vg.timeframe });
           if (detail && detail.volume_change_pct != null && Number(detail.volume_change_pct) < vg.minVolumeChangePct) {
-            actionMap.set(p.position, { 
-              action: "CLOSE", 
-              rule: "volumeGuard", 
-              reason: `Volume trend decelerated below threshold (current: ${Number(detail.volume_change_pct).toFixed(1)}% < min: ${vg.minVolumeChangePct}%)` 
+            actionMap.set(p.position, {
+              action: "CLOSE",
+              rule: "volumeGuard",
+              reason: `Volume trend decelerated below threshold (current: ${Number(detail.volume_change_pct).toFixed(1)}% < min: ${vg.minVolumeChangePct}%)`
             });
             continue;
           }
@@ -494,7 +494,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
       _screeningBusy = false;
       return screenReport;
     }
-    
+
     // Check if we have slots for NEW candidates
     noSlotsForNew = totalConsumedSlots >= config.risk.maxPositions;
     const minRequired = config.management.deployAmountSol + config.management.gasReserve;
@@ -688,7 +688,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
             const detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
             const newVcp = detail.volume_change_pct ?? 0;
             const delta = newVcp - p.initial_volume_change_pct;
-            
+
             if (delta >= config.screening.accelerationThresholdPct) {
               trackedPoolBlocks.push(
                 `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
@@ -744,9 +744,9 @@ export async function runScreeningCycle({ silent = false } = {}) {
 1. TRACKED POOLS FIRST: Check if there are TRACKED POOLS READY FOR EVALUATION.
    - For EACH tracked pool, you MUST call deploy_position using its exact original_deploy_args. Include 'volume_trend' = 'Accelerated by +X%'. Then stop (do not deploy anything else).
 
-2. NEW CANDIDATES: ${noSlotsForNew ? 
-   "You currently have NO open slots for new candidates (tracked pools are consuming them). DO NOT queue any new candidates. Report ⛔ NO DEPLOY." : 
-   `If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
+2. NEW CANDIDATES: ${noSlotsForNew ?
+          "You currently have NO open slots for new candidates (tracked pools are consuming them). DO NOT queue any new candidates. Report ⛔ NO DEPLOY." :
+          `If no tracked pools were deployed, check the PRE-LOADED CANDIDATES.
    - If there are candidates available, pick ONE best candidate. You MUST queue it for observation by calling queue_for_tracking (MUST include 'volume_change_pct' and 'llm_reasoning').
    - When calling queue_for_tracking, calculate bins_below: round((35*1.5) + (volatility/5)*55) clamped to [35,200]. For single-side SOL deploys, set amount_y only, keep amount_x = 0, keep bins_above = 0.`}
 
