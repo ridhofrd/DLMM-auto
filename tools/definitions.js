@@ -190,9 +190,10 @@ WARNING: This executes a real on-chain transaction. Check DRY_RUN mode.`,
           fee_tvl_ratio: { type: "number", description: "fee/TVL ratio at deploy time" },
           organic_score: { type: "number", description: "Base token organic score at deploy time" },
           volume_trend: { type: "string", description: "Pool volume trend (e.g. accelerating, stable) at deploy time" },
+          deployed_volume_change: { type: "number", description: "The current volume change percentage at deploy time. Used to calculate acceleration." },
           initial_value_usd: { type: "number", description: "Estimated USD value being deployed" }
         },
-        required: ["pool_address"]
+        required: ["pool_address", "deployed_volume_change"]
       }
     }
   },
@@ -320,12 +321,16 @@ WARNING: This executes a real on-chain transaction. Cannot be undone.`,
             type: "boolean",
             description: "Set to true if user explicitly wants to hold/keep the base token after closing. Default: false (auto-swaps base token back to SOL)."
           },
+          closed_volume_change: {
+            type: "number",
+            description: "The current volume change percentage at close time (e.g. to evaluate volume guard)."
+          },
           reason: {
             type: "string",
             description: "Why this position is being closed. Include the rule that triggered it, e.g. 'low yield', 'stop loss', 'trailing TP', 'OOR'. Used for pool memory."
           }
         },
-        required: ["position_address"]
+        required: ["position_address", "closed_volume_change"]
       }
     }
   },

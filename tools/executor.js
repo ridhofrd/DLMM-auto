@@ -105,7 +105,19 @@ const toolMap = {
   get_pool_detail: getPoolDetail,
   get_position_pnl: getPositionPnl,
   get_active_bin: getActiveBin,
-  deploy_position: deployPosition,
+  deploy_position: async (args) => {
+    try {
+      const { getTrackedPools } = await import("./pool-tracker.js");
+      const trackedPools = getTrackedPools();
+      const tracked = trackedPools.find((p) => p.pool_address === args.pool_address);
+      if (tracked && tracked.initial_volume_change_pct !== undefined) {
+        args.initial_volume_change_pct = tracked.initial_volume_change_pct;
+      }
+    } catch (e) {
+      log("executor_warn", `Failed to fetch tracking data: ${e.message}`);
+    }
+    return deployPosition(args);
+  },
   queue_for_tracking: (args) => {
     const { volume_change_pct, llm_reasoning, ...deploy_args } = args;
     return queueForTracking({

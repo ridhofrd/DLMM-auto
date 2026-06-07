@@ -67,9 +67,15 @@ export function trackPosition({
   fee_tvl_ratio,
   organic_score,
   initial_value_usd,
+  initial_volume_change_pct,
+  deployed_volume_change,
   signal_snapshot = null,
 }) {
   const state = load();
+  const volume_acceleration = 
+    (typeof deployed_volume_change === 'number' && typeof initial_volume_change_pct === 'number') 
+      ? deployed_volume_change - initial_volume_change_pct 
+      : null;
   state.positions[position] = {
     position,
     pool,
@@ -85,6 +91,9 @@ export function trackPosition({
     initial_fee_tvl_24h: fee_tvl_ratio,
     organic_score,
     initial_value_usd,
+    initial_volume_change_pct,
+    deployed_volume_change,
+    volume_acceleration,
     signal_snapshot: signal_snapshot || null,
     deployed_at: new Date().toISOString(),
     out_of_range_since: null,
@@ -95,6 +104,7 @@ export function trackPosition({
     closed_at: null,
     notes: [],
     peak_pnl_pct: 0,
+    lowest_pnl_pct: 0,
     pending_peak_pnl_pct: null,
     pending_peak_started_at: null,
     pending_trailing_current_pnl_pct: null,
@@ -396,6 +406,14 @@ export function updatePnlAndCheckExits(position_address, positionData, mgmtConfi
     pos.out_of_range_since = null;
     changed = true;
     log("state", `Position ${position_address} back in range`);
+  }
+
+  // Track lowest PnL
+  if (!pnl_pct_suspicious && currentPnlPct != null) {
+    if (pos.lowest_pnl_pct === undefined || currentPnlPct < pos.lowest_pnl_pct) {
+      pos.lowest_pnl_pct = currentPnlPct;
+      changed = true;
+    }
   }
 
   if (changed) save(state);

@@ -202,6 +202,8 @@ export async function deployPosition({
   fee_tvl_ratio,
   organic_score,
   initial_value_usd,
+  initial_volume_change_pct,
+  deployed_volume_change,
 }) {
   pool_address = normalizeMint(pool_address);
   const activeStrategy = strategy || config.strategy.strategy;
@@ -399,6 +401,8 @@ export async function deployPosition({
           amount_x: finalAmountX,
           active_bin: activeBin.binId,
           initial_value_usd,
+          initial_volume_change_pct,
+          deployed_volume_change,
         });
       }
 
@@ -533,6 +537,8 @@ export async function deployPosition({
       amount_x: finalAmountX,
       active_bin: activeBin.binId,
       initial_value_usd,
+      initial_volume_change_pct,
+      deployed_volume_change,
     });
 
     appendDecision({
@@ -1183,7 +1189,7 @@ function buildCloseCtx({
   };
 }
 
-export async function closePosition({ position_address, reason }) {
+export async function closePosition({ position_address, reason, closed_volume_change }) {
   position_address = normalizeMint(position_address);
   if (process.env.DRY_RUN === "true") {
     return { dry_run: true, would_close: position_address, message: "DRY RUN — no transaction sent" };
@@ -1348,6 +1354,11 @@ export async function closePosition({ position_address, reason }) {
           minutes_in_range: minutesHeld - minutesOOR,
           minutes_held: minutesHeld,
           close_reason: reason || "agent decision",
+          lowest_pnl_pct: tracked.lowest_pnl_pct,
+          initial_volume_change_pct: tracked.initial_volume_change_pct,
+          deployed_volume_change: tracked.deployed_volume_change,
+          closed_volume_change,
+          volume_acceleration: tracked.volume_acceleration,
         });
 
         appendDecision({
@@ -1652,6 +1663,11 @@ export async function closePosition({ position_address, reason }) {
         minutes_in_range: minutesHeld - minutesOOR,
         minutes_held: minutesHeld,
         close_reason: reason || "agent decision",
+        lowest_pnl_pct: tracked.lowest_pnl_pct,
+        initial_volume_change_pct: tracked.initial_volume_change_pct,
+        deployed_volume_change: tracked.deployed_volume_change,
+        closed_volume_change,
+        volume_acceleration: tracked.volume_acceleration,
       });
 
       appendDecision({
