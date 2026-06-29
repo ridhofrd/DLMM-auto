@@ -42,6 +42,9 @@ const timers = {
   screeningLastRun: null,
 };
 
+// Track consecutive Volume Guard failures per position
+const _volumeGuardStrikes = new Map();
+
 function nextRunIn(lastRun, intervalMin) {
   if (!lastRun) return intervalMin * 60;
   const elapsed = (Date.now() - lastRun) / 1000;
@@ -260,19 +263,33 @@ export async function runManagementCycle({ silent = false } = {}) {
         continue;
       }
 
-      // Volume Guard
+      // Volume Guard (consecutive-check confirmation)
       const vg = config.management.volumeGuard;
       if (vg?.enabled && (p.age_minutes ?? 0) >= vg.waitMinutes) {
         try {
           const { getPoolDetail } = await import("./tools/screening.js");
           const detail = await getPoolDetail({ pool_address: p.pool, timeframe: vg.timeframe });
+          const requiredStrikes = vg.consecutiveChecks ?? 2;
           if (detail && detail.volume_change_pct != null && Number(detail.volume_change_pct) < vg.minVolumeChangePct) {
-            actionMap.set(p.position, {
-              action: "CLOSE",
-              rule: "volumeGuard",
-              reason: `Volume trend decelerated below threshold (current: ${Number(detail.volume_change_pct).toFixed(1)}% < min: ${vg.minVolumeChangePct}%)`
-            });
-            continue;
+            const strikes = (_volumeGuardStrikes.get(p.position) ?? 0) + 1;
+            _volumeGuardStrikes.set(p.position, strikes);
+            if (strikes >= requiredStrikes) {
+              _volumeGuardStrikes.delete(p.position);
+              actionMap.set(p.position, {
+                action: "CLOSE",
+                rule: "volumeGuard",
+                reason: `Volume collapsed ${strikes}x consecutively (current: ${Number(detail.volume_change_pct).toFixed(1)}% < min: ${vg.minVolumeChangePct}%)`
+              });
+              continue;
+            } else {
+              log("cron", `VolumeGuard strike ${strikes}/${requiredStrikes} for ${p.pair} (vol change: ${Number(detail.volume_change_pct).toFixed(1)}%)`);
+            }
+          } else {
+            // Volume recovered — reset strikes
+            if (_volumeGuardStrikes.has(p.position)) {
+              log("cron", `VolumeGuard strikes reset for ${p.pair} — volume recovered`);
+              _volumeGuardStrikes.delete(p.position);
+            }
           }
         } catch (e) {
           log("cron", `VolumeGuard fetch failed for ${p.pair}: ${e.message}`);
@@ -353,6 +370,7 @@ export async function runManagementCycle({ silent = false } = {}) {
           const act = actionMap.get(p.position);
           if (act.action === "CLOSE") {
             log("cron", `Executing direct CLOSE for ${p.pair}: ${act.reason}`);
+            _volumeGuardStrikes.delete(p.position);
             try {
               await liveMessage?.toolStart("close_position");
               const result = await closePosition({

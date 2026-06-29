@@ -108,8 +108,9 @@ export const config = {
     emergencyPollIntervalSec: u.emergencyPollIntervalSec ?? 150,    // poll every N seconds (150 = 2.5 min)
     volumeGuard: u.volumeGuard ?? {
       enabled: false,
-      minVolumeChangePct: 5,
-      waitMinutes: 30,
+      minVolumeChangePct: -25,
+      waitMinutes: 60,
+      consecutiveChecks: 2,
       timeframe: "1h"
     },
   },

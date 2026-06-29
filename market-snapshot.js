@@ -24,9 +24,9 @@ const POOL_DISCOVERY_BASE = "https://pool-discovery-api.datapi.meteora.ag";
 const MAX_SNAPSHOTS = 5000; // cap file size
 
 // ─── Token Mints ──────────────────────────────────────────────
-const SOL_MINT  = "So11111111111111111111111111111111111111112";
-const BTC_MINT  = "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh"; // Wrapped BTC (Wormhole)
-const ETH_MINT  = "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs"; // Wrapped ETH (Wormhole)
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+const BTC_MINT = "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh"; // Wrapped BTC (Wormhole)
+const ETH_MINT = "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs"; // Wrapped ETH (Wormhole)
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 // ─── Load / Save ──────────────────────────────────────────────
@@ -57,10 +57,11 @@ async function fetchMacroPrices() {
     const data = await res.json();
 
     const extract = (mint, symbol) => {
-      const entry = data?.data?.[mint];
+      const entry = data?.data?.[mint] || data?.[mint];
+      const priceVal = entry?.usdPrice ?? entry?.price;
       return {
         symbol,
-        price: entry?.price ? Number(Number(entry.price).toFixed(4)) : null,
+        price: priceVal != null ? Number(Number(priceVal).toFixed(4)) : null,
       };
     };
 
@@ -154,54 +155,54 @@ async function fetchMeteoraEcosystemStats() {
   }
 }
 
-// ─── 3. Trending Pool Snapshot ────────────────────────────────
-async function fetchTrendingPoolSnapshot() {
-  try {
-    const url = `${POOL_DISCOVERY_BASE}/pools?page_size=20&filter_by=${encodeURIComponent(
-      "pool_type=dlmm&&tvl>=10000"
-    )}&timeframe=30m&category=trending`;
+// // ─── 3. Trending Pool Snapshot ────────────────────────────────
+// async function fetchTrendingPoolSnapshot() {
+//   try {
+//     const url = `${POOL_DISCOVERY_BASE}/pools?page_size=20&filter_by=${encodeURIComponent(
+//       "pool_type=dlmm&&tvl>=10000"
+//     )}&timeframe=30m&category=trending`;
 
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Trending pools API ${res.status}`);
-    const data = await res.json();
-    const pools = Array.isArray(data?.data) ? data.data : [];
+//     const res = await fetch(url);
+//     if (!res.ok) throw new Error(`Trending pools API ${res.status}`);
+//     const data = await res.json();
+//     const pools = Array.isArray(data?.data) ? data.data : [];
 
-    return pools.slice(0, 15).map((p) => ({
-      pool: p.pool_address,
-      name: p.name,
-      base_symbol: p.token_x?.symbol,
-      base_mint: p.token_x?.address,
-      bin_step: p.dlmm_params?.bin_step || null,
-      active_tvl: Math.round(Number(p.active_tvl) || 0),
-      volume: Math.round(Number(p.volume) || 0),
-      fees: Math.round(Number(p.fee) || 0),
-      fee_tvl_ratio: Number((Number(p.fee_active_tvl_ratio) || 0).toFixed(4)),
-      volatility: Number((Number(p.volatility) || 0).toFixed(2)),
-      organic_score: Math.round(Number(p.token_x?.organic_score) || 0),
-      holders: Number(p.base_token_holders) || 0,
-      mcap: Math.round(Number(p.token_x?.market_cap) || 0),
-      swap_count: Number(p.swap_count) || 0,
-      unique_traders: Number(p.unique_traders) || 0,
-      active_positions: Number(p.active_positions) || 0,
-      open_positions: Number(p.open_positions) || 0,
-      price: Number(p.pool_price) || null,
-      price_change_pct: Number((Number(p.pool_price_change_pct) || 0).toFixed(2)),
-      price_trend: p.price_trend || null,
-      volume_change_pct: Number((Number(p.volume_change_pct) || 0).toFixed(2)),
-      fee_change_pct: Number((Number(p.fee_change_pct) || 0).toFixed(2)),
-    }));
-  } catch (error) {
-    log("snapshot_warn", `Trending pool snapshot failed: ${error.message}`);
-    return [];
-  }
-}
+//     return pools.slice(0, 15).map((p) => ({
+//       pool: p.pool_address,
+//       name: p.name,
+//       base_symbol: p.token_x?.symbol,
+//       base_mint: p.token_x?.address,
+//       bin_step: p.dlmm_params?.bin_step || null,
+//       active_tvl: Math.round(Number(p.active_tvl) || 0),
+//       volume: Math.round(Number(p.volume) || 0),
+//       fees: Math.round(Number(p.fee) || 0),
+//       fee_tvl_ratio: Number((Number(p.fee_active_tvl_ratio) || 0).toFixed(4)),
+//       volatility: Number((Number(p.volatility) || 0).toFixed(2)),
+//       organic_score: Math.round(Number(p.token_x?.organic_score) || 0),
+//       holders: Number(p.base_token_holders) || 0,
+//       mcap: Math.round(Number(p.token_x?.market_cap) || 0),
+//       swap_count: Number(p.swap_count) || 0,
+//       unique_traders: Number(p.unique_traders) || 0,
+//       active_positions: Number(p.active_positions) || 0,
+//       open_positions: Number(p.open_positions) || 0,
+//       price: Number(p.pool_price) || null,
+//       price_change_pct: Number((Number(p.pool_price_change_pct) || 0).toFixed(2)),
+//       price_trend: p.price_trend || null,
+//       volume_change_pct: Number((Number(p.volume_change_pct) || 0).toFixed(2)),
+//       fee_change_pct: Number((Number(p.fee_change_pct) || 0).toFixed(2)),
+//     }));
+//   } catch (error) {
+//     log("snapshot_warn", `Trending pool snapshot failed: ${error.message}`);
+//     return [];
+//   }
+// }
 
 // ─── Market Session Helper ────────────────────────────────────
 function getMarketSession(date = new Date()) {
   const utcHour = date.getUTCHours();
   // Rough sessions based on major market open hours
-  if (utcHour >= 0 && utcHour < 8)   return "asia";       // 00:00–08:00 UTC
-  if (utcHour >= 8 && utcHour < 14)  return "europe";     // 08:00–14:00 UTC
+  if (utcHour >= 0 && utcHour < 8) return "asia";       // 00:00–08:00 UTC
+  if (utcHour >= 8 && utcHour < 14) return "europe";     // 08:00–14:00 UTC
   if (utcHour >= 14 && utcHour < 21) return "us";         // 14:00–21:00 UTC
   return "late_us";                                         // 21:00–00:00 UTC
 }
@@ -224,10 +225,9 @@ export async function takeMarketSnapshot({ trigger = "manual", extra = null } = 
   log("snapshot", `Taking market snapshot (trigger: ${trigger})...`);
 
   // Run all fetches in parallel
-  const [macro, ecosystem, trending] = await Promise.all([
+  const [macro, ecosystem] = await Promise.all([
     fetchMacroPrices(),
     fetchMeteoraEcosystemStats(),
-    fetchTrendingPoolSnapshot(),
   ]);
 
   const snapshot = {
@@ -247,9 +247,6 @@ export async function takeMarketSnapshot({ trigger = "manual", extra = null } = 
     // 2. Meteora ecosystem aggregate
     ecosystem,
 
-    // 3. Top trending pools at this moment
-    trending_pools: trending,
-
     // 4. Extra context (position info, config state, etc.)
     ...(extra ? { context: extra } : {}),
   };
@@ -259,7 +256,7 @@ export async function takeMarketSnapshot({ trigger = "manual", extra = null } = 
   snapshots.push(snapshot);
   saveSnapshots(snapshots);
 
-  log("snapshot", `Snapshot saved (SOL=$${macro.sol.price}, ${ecosystem.sampled_pools || 0} pools sampled, ${trending.length} trending)`);
+  log("snapshot", `Snapshot saved (SOL=$${macro.sol.price}, ${ecosystem.sampled_pools || 0} pools sampled)`);
 
   return snapshot;
 }
