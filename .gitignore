@@ -11,7 +11,7 @@ data_analytics/
 
 # User config (contains RPC URL, wallet key, API keys)
 user-config.json
-
+user-config*
 # Runtime state (position tracking, lessons — user-specific)
 state.json
 lessons.json

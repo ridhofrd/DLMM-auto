@@ -7,7 +7,7 @@ export const POOL_DIR = path.resolve(__dirname, "..");
 export const REPO_ROOT = path.resolve(POOL_DIR, "../..");
 
 export function resolveFromRepo(relativePath) {
-  if (!relativePath) return REPO_ROOT;
+  if (!relativePath) return undefined;
   return path.isAbsolute(relativePath) ? relativePath : path.resolve(REPO_ROOT, relativePath);
 }
 
