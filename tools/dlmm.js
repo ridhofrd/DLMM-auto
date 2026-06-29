@@ -1209,6 +1209,18 @@ export async function closePosition({ position_address, reason, closed_volume_ch
     const wallet = getWallet();
     const poolAddress = await lookupPoolForPosition(position_address, wallet.publicKey.toString());
     const poolMeta = await getPoolMetadata(poolAddress);
+    
+    let current_closed_volume_change = closed_volume_change;
+    if (current_closed_volume_change == null) {
+      try {
+        const { getPoolDetail } = await import("./screening.js");
+        const detail = await getPoolDetail({ pool_address: poolAddress, timeframe: "5m" });
+        current_closed_volume_change = detail?.volume_change_pct;
+      } catch (e) {
+        // ignore fetch failures during close to prevent blocking the close
+      }
+    }
+
     if (shouldUseLpAgentRelay()) {
       const livePositions = await getMyPositions({ force: true, silent: true });
       const livePosition = livePositions?.positions?.find((position) => position.position === position_address);
@@ -1357,7 +1369,7 @@ export async function closePosition({ position_address, reason, closed_volume_ch
           lowest_pnl_pct: tracked.lowest_pnl_pct,
           initial_volume_change_pct: tracked.initial_volume_change_pct,
           deployed_volume_change: tracked.deployed_volume_change,
-          closed_volume_change,
+          closed_volume_change: current_closed_volume_change,
           volume_acceleration: tracked.volume_acceleration,
         });
 
@@ -1666,7 +1678,7 @@ export async function closePosition({ position_address, reason, closed_volume_ch
         lowest_pnl_pct: tracked.lowest_pnl_pct,
         initial_volume_change_pct: tracked.initial_volume_change_pct,
         deployed_volume_change: tracked.deployed_volume_change,
-        closed_volume_change,
+        closed_volume_change: current_closed_volume_change,
         volume_acceleration: tracked.volume_acceleration,
       });
 
