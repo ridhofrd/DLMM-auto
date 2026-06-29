@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { jsonrepair } from "jsonrepair";
+import fs from "fs";
+import dotenv from "dotenv";
 import { buildSystemPrompt } from "./prompt.js";
 import { executeTool } from "./tools/executor.js";
 import { tools } from "./tools/definitions.js";
@@ -100,11 +102,33 @@ import { getDecisionSummary } from "./decision-log.js";
 
 // Supports OpenRouter (default) or any OpenAI-compatible local server (e.g. LM Studio)
 // To use LM Studio: set LLM_BASE_URL=http://localhost:1234/v1 and LLM_API_KEY=lm-studio in .env
-const client = new OpenAI({
-  baseURL: process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1",
-  apiKey: process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY,
-  timeout: 5 * 60 * 1000,
-});
+let _client = null;
+let _lastEnvMtime = 0;
+
+function getActiveClient() {
+  try {
+    const stat = fs.statSync(".env");
+    if (stat.mtimeMs > _lastEnvMtime) {
+      const parsed = dotenv.parse(fs.readFileSync(".env", "utf8"));
+      for (const k in parsed) {
+        process.env[k] = parsed[k];
+      }
+      _lastEnvMtime = stat.mtimeMs;
+      _client = null; // force recreate
+    }
+  } catch (e) {
+    // ignore if no .env
+  }
+
+  if (!_client) {
+    _client = new OpenAI({
+      baseURL: process.env.LLM_BASE_URL || "https://openrouter.ai/api/v1",
+      apiKey: process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY,
+      timeout: 5 * 60 * 1000,
+    });
+  }
+  return _client;
+}
 
 const DEFAULT_MODEL = process.env.LLM_MODEL || "openrouter/healer-alpha";
 
@@ -219,7 +243,7 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
 
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          response = await client.chat.completions.create({
+          response = await getActiveClient().chat.completions.create({
             model: usedModel,
             messages,
             tools: toolsForRun,

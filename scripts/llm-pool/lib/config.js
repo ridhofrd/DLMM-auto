@@ -48,6 +48,7 @@ export function loadConfig() {
 
   config.accounts_file = resolveFromRepo(merged.accounts_file) || config.accounts_file;
   config.state_file = resolveFromRepo(merged.state_file) || config.state_file;
+  config.env_file = resolveFromRepo(merged.env_file) || config.env_file;
 
   return config;
 }
