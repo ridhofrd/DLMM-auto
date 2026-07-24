@@ -10,6 +10,7 @@
 
 import fs from "fs";
 import { log } from "./logger.js";
+import { checkExitConditions } from "./src/domain/position.js";
 
 const STATE_FILE = "./state.json";
 
@@ -418,56 +419,7 @@ export function updatePnlAndCheckExits(position_address, positionData, mgmtConfi
 
   if (changed) save(state);
 
-  // ── Stop loss ──────────────────────────────────────────────────
-  if (!pnl_pct_suspicious && currentPnlPct != null && mgmtConfig.stopLossPct != null && currentPnlPct <= mgmtConfig.stopLossPct) {
-    return {
-      action: "STOP_LOSS",
-      reason: `Stop loss: PnL ${currentPnlPct.toFixed(2)}% <= ${mgmtConfig.stopLossPct}%`,
-    };
-  }
-
-  // ── Trailing TP ────────────────────────────────────────────────
-  if (!pnl_pct_suspicious && pos.trailing_active) {
-    const dropFromPeak = pos.peak_pnl_pct - currentPnlPct;
-    if (dropFromPeak >= mgmtConfig.trailingDropPct) {
-      return {
-        action: "TRAILING_TP",
-        reason: `Trailing TP: peak ${pos.peak_pnl_pct.toFixed(2)}% → current ${currentPnlPct.toFixed(2)}% (dropped ${dropFromPeak.toFixed(2)}% >= ${mgmtConfig.trailingDropPct}%)`,
-        needs_confirmation: true,
-        peak_pnl_pct: pos.peak_pnl_pct,
-        current_pnl_pct: currentPnlPct,
-        drop_from_peak_pct: dropFromPeak,
-      };
-    }
-  }
-
-  // ── Out of range too long ──────────────────────────────────────
-  if (pos.out_of_range_since) {
-    const minutesOOR = Math.floor((Date.now() - new Date(pos.out_of_range_since).getTime()) / 60000);
-    if (minutesOOR >= mgmtConfig.outOfRangeWaitMinutes) {
-      return {
-        action: "OUT_OF_RANGE",
-        reason: `Out of range for ${minutesOOR}m (limit: ${mgmtConfig.outOfRangeWaitMinutes}m)`,
-      };
-    }
-  }
-
-  // ── Low yield (only after position has had time to accumulate fees) ───
-  const { age_minutes } = positionData;
-  const minAgeForYieldCheck = mgmtConfig.minAgeBeforeYieldCheck ?? 60;
-  if (
-    fee_per_tvl_24h != null &&
-    mgmtConfig.minFeePerTvl24h != null &&
-    fee_per_tvl_24h < mgmtConfig.minFeePerTvl24h &&
-    (age_minutes == null || age_minutes >= minAgeForYieldCheck)
-  ) {
-    return {
-      action: "LOW_YIELD",
-      reason: `Low yield: fee/TVL ${fee_per_tvl_24h.toFixed(2)}% < min ${mgmtConfig.minFeePerTvl24h}% (age: ${age_minutes ?? "?"}m)`,
-    };
-  }
-
-  return null;
+  return checkExitConditions(positionData, pos, mgmtConfig);
 }
 
 // ─── Briefing Tracking ─────────────────────────────────────────

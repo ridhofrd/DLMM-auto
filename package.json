@@ -13,9 +13,13 @@
     "dev": "DRY_RUN=true node index.js",
     "test:screen": "node test/test-screening.js",
     "test:agent": "DRY_RUN=true node test/test-agent.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "llm-pool": "node scripts/llm-pool/cli.js",
     "llm-pool:daemon": "node scripts/llm-pool/daemon.js",
     "postinstall": "node scripts/patch-anchor.js"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   },
   "knip": {
     "ignore": [

@@ -1,1 +1,25 @@
-{}
+{
+  "G8dd7ht5GW2SbvB3Rhwv7hsFNMU5feutun21w9gAEFUw": {
+    "pool_address": "G8dd7ht5GW2SbvB3Rhwv7hsFNMU5feutun21w9gAEFUw",
+    "pool_name": "looong-SOL",
+    "deploy_args": {
+      "pool_address": "G8dd7ht5GW2SbvB3Rhwv7hsFNMU5feutun21w9gAEFUw",
+      "amount_y": 3,
+      "amount_x": 0,
+      "strategy": "spot",
+      "bins_below": 145,
+      "bins_above": 0,
+      "pool_name": "looong-SOL",
+      "base_mint": "AkchGAUdXXRGHt3HXaHbTvw3JLGUwtJRmYnkG66wpump",
+      "bin_step": 100,
+      "base_fee": 1,
+      "volatility": 8.42,
+      "fee_tvl_ratio": 1.164,
+      "organic_score": 86,
+      "volume_trend": "undefined"
+    },
+    "first_seen_at": "2026-07-24T09:55:37.548Z",
+    "initial_volume_change_pct": 205.4,
+    "llm_reasoning": "looong shows 128% 1h price increase with high organic score (86) and solid fees (237 SOL). While volatility is elevated (8.42), memory shows spot strategy can capture gains even at higher volatility. Volume acceleration is strong at +205%. Will track for deployment when volume accelerates further or stabilizes."
+  }
+}

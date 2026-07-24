@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cron from "node-cron";
 import readline from "readline";
+import { checkSuspectPnl, getDeterministicCloseRule, checkVolumeGuard } from "./src/domain/position.js";
 import { agentLoop } from "./agent.js";
 import { log } from "./logger.js";
 import { getMyPositions, closePosition, getActiveBin, claimFees } from "./tools/dlmm.js";
@@ -269,34 +270,36 @@ export async function runManagementCycle({ silent = false } = {}) {
         try {
           const { getPoolDetail } = await import("./tools/screening.js");
           const detail = await getPoolDetail({ pool_address: p.pool, timeframe: vg.timeframe });
-          const requiredStrikes = vg.consecutiveChecks ?? 2;
-          if (detail && detail.volume_change_pct != null && Number(detail.volume_change_pct) < vg.minVolumeChangePct) {
-            const strikes = (_volumeGuardStrikes.get(p.position) ?? 0) + 1;
-            _volumeGuardStrikes.set(p.position, strikes);
-            if (strikes >= requiredStrikes) {
-              _volumeGuardStrikes.delete(p.position);
-              actionMap.set(p.position, {
-                action: "CLOSE",
-                rule: "volumeGuard",
-                reason: `Volume collapsed ${strikes}x consecutively (current: ${Number(detail.volume_change_pct).toFixed(1)}% < min: ${vg.minVolumeChangePct}%)`
-              });
-              continue;
-            } else {
-              log("cron", `VolumeGuard strike ${strikes}/${requiredStrikes} for ${p.pair} (vol change: ${Number(detail.volume_change_pct).toFixed(1)}%)`);
-            }
-          } else {
-            // Volume recovered — reset strikes
-            if (_volumeGuardStrikes.has(p.position)) {
-              log("cron", `VolumeGuard strikes reset for ${p.pair} — volume recovered`);
-              _volumeGuardStrikes.delete(p.position);
-            }
+          
+          const currentStrikes = _volumeGuardStrikes.get(p.position) ?? 0;
+          const vgResult = checkVolumeGuard(p, detail, currentStrikes, vg);
+          
+          if (vgResult.newStrikes === 0 && currentStrikes > 0 && !vgResult.action) {
+            _volumeGuardStrikes.delete(p.position);
+          } else if (vgResult.newStrikes > 0) {
+            _volumeGuardStrikes.set(p.position, vgResult.newStrikes);
+          }
+
+          if (vgResult.logMessage) log("cron", vgResult.logMessage);
+
+          if (vgResult.action) {
+            _volumeGuardStrikes.delete(p.position);
+            actionMap.set(p.position, vgResult.action);
+            continue;
           }
         } catch (e) {
           log("cron", `VolumeGuard fetch failed for ${p.pair}: ${e.message}`);
         }
       }
 
-      const closeRule = getDeterministicCloseRule(p, config.management);
+      const tracked = getTrackedPosition(p.position);
+      const hasTrackedAmount = !!(tracked && tracked.amount_sol);
+      const suspectCheck = checkSuspectPnl(p, hasTrackedAmount);
+      if (suspectCheck.isSuspect && suspectCheck.warning) {
+        log("cron_warn", suspectCheck.warning);
+      }
+
+      const closeRule = getDeterministicCloseRule(p, config.management, suspectCheck.isSuspect);
       if (closeRule) {
         actionMap.set(p.position, closeRule);
         continue;
@@ -1150,47 +1153,6 @@ function formatCloseReasonForAlert(act, position) {
   return `${base} | PnL at signal: ${position.pnl_pct}%`;
 }
 
-function getDeterministicCloseRule(position, managementConfig) {
-  const tracked = getTrackedPosition(position.position);
-  const pnlSuspect = (() => {
-    if (position.pnl_pct == null) return false;
-    if (position.pnl_pct > -90) return false;
-    if (tracked?.amount_sol && (position.total_value_usd ?? 0) > 0.01) {
-      log("cron_warn", `Suspect PnL for ${position.pair}: ${position.pnl_pct}% but position still has value — skipping PnL rules`);
-      return true;
-    }
-    return false;
-  })();
-
-  if (!pnlSuspect && position.pnl_pct != null && position.pnl_pct <= managementConfig.stopLossPct) {
-    return {
-      action: "CLOSE",
-      rule: 1,
-      reason: `Stop loss: PnL ${position.pnl_pct}% <= limit ${managementConfig.stopLossPct}%`,
-    };
-  }
-  if (!pnlSuspect && position.pnl_pct != null && position.pnl_pct >= managementConfig.takeProfitPct) {
-    return {
-      action: "CLOSE",
-      rule: 2,
-      reason: `Take profit: PnL ${position.pnl_pct}% >= target ${managementConfig.takeProfitPct}%`,
-    };
-  }
-  if (
-    position.active_bin != null &&
-    position.upper_bin != null &&
-    position.active_bin > position.upper_bin + managementConfig.outOfRangeBinsToClose
-  ) {
-    return {
-      action: "CLOSE",
-      rule: 3,
-      reason: `Pumped above range: active bin ${position.active_bin} > upper ${position.upper_bin} + ${managementConfig.outOfRangeBinsToClose} bins`,
-    };
-  }
-  if (
-    position.active_bin != null &&
-    position.upper_bin != null &&
-    position.active_bin > position.upper_bin &&
     (position.minutes_out_of_range ?? 0) >= managementConfig.outOfRangeWaitMinutes
   ) {
     return {
