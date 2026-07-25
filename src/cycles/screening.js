@@ -8,6 +8,7 @@ import { getActiveStrategy } from "../../strategy-library.js";
 import { checkSmartWalletsOnPool } from "../../smart-wallets.js";
 import { getTokenNarrative, getTokenInfo } from "../../tools/token.js";
 import { getGMGNTokenAnalysis } from "../../tools/gmgn.js";
+import { evaluateTrackedPool } from "../domain/observation.js";
 import { recallForPool } from "../../pool-memory.js";
 import { appendDecision } from "../../decision-log.js";
 import { agentLoop } from "../../agent.js";
@@ -235,39 +236,31 @@ export async function runScreeningCycle({ silent = false } = {}) {
     if (config.screening.enablePoolObservation) {
       const { getPoolDetail } = await import("../../tools/screening.js");
       for (const p of trackedPools) {
-        const ageMs = Date.now() - new Date(p.first_seen_at).getTime();
-        const ageMin = ageMs / (1000 * 60);
-        if (ageMin >= config.screening.observationWindowMin) {
-          try {
-            const detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
-            const newVcp = detail.volume_change_pct ?? 0;
-            const delta = newVcp - p.initial_volume_change_pct;
+        let detail = null;
+        try {
+          detail = await getPoolDetail({ pool_address: p.pool_address, timeframe: config.screening.timeframe });
+        } catch (e) {
+          log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
+        }
 
-            if (delta >= config.screening.accelerationThresholdPct) {
-              trackedPoolBlocks.push(
-                `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
-                `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
-                `  current_vcp: ${newVcp}%\n` +
-                `  delta: ${delta.toFixed(2)}%\n` +
-                `  threshold_required: ${config.screening.accelerationThresholdPct}%\n` +
-                `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
-                `  action_required: You MUST call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${delta.toFixed(2)}%'.`
-              );
-            } else {
-              log("screening", `Tracked pool ${p.pool_name} failed acceleration check (delta ${delta.toFixed(2)}% < ${config.screening.accelerationThresholdPct}%). Auto-discarding.`);
-              const { discardTrackedPool } = await import("../../tools/pool-tracker.js");
-              discardTrackedPool(p.pool_address);
-              if (!silent && telegramEnabled()) {
-                sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${p.pool_name}\nDecision: ⛔ DISCARDED\nReason: Volume did not accelerate enough (${delta.toFixed(2)}% < ${config.screening.accelerationThresholdPct}% req)`).catch(() => { });
-              }
-            }
-          } catch (e) {
-            log("cron_warn", `Failed to fetch detail for tracked pool ${p.pool_name}: ${e.message}`);
-            const { discardTrackedPool } = await import("../../tools/pool-tracker.js");
-            discardTrackedPool(p.pool_address);
-            if (!silent && telegramEnabled()) {
-              sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${p.pool_name}\nDecision: ⛔ DISCARDED\nReason: Failed to fetch pool data (likely dead/no TVL)`).catch(() => { });
-            }
+        const evalResult = evaluateTrackedPool(p, detail, config.screening);
+        
+        if (evalResult.action === "PROMOTE") {
+          trackedPoolBlocks.push(
+            `TRACKED POOL READY FOR EVALUATION: ${p.pool_name} (${p.pool_address})\n` +
+            `  baseline_vcp: ${p.initial_volume_change_pct}%\n` +
+            `  current_vcp: ${evalResult.newVcp}%\n` +
+            `  delta: ${evalResult.delta.toFixed(2)}%\n` +
+            `  threshold_required: ${evalResult.thresholdRequired}%\n` +
+            `  original_deploy_args: ${JSON.stringify(p.deploy_args)}\n` +
+            `  action_required: You MUST call deploy_position using the exact original_deploy_args and add 'volume_trend' = 'Accelerated by +${evalResult.delta.toFixed(2)}%'.`
+          );
+        } else if (evalResult.action === "DISCARD") {
+          log("screening", `Tracked pool ${p.pool_name} discarded: ${evalResult.reason}`);
+          const { discardTrackedPool } = await import("../../tools/pool-tracker.js");
+          discardTrackedPool(p.pool_address);
+          if (!silent && telegramEnabled()) {
+            sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${p.pool_name}\nDecision: ⛔ DISCARDED\nReason: ${evalResult.reason}`).catch(() => { });
           }
         }
       }
