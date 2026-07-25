@@ -12,6 +12,10 @@ export function appendHistory(userMsg, assistantMsg) {
   }
 }
 
+export function clearHistory() {
+  sessionHistory.length = 0;
+}
+
 let _latestCandidates = [];
 let _latestCandidatesAt = null;
 
