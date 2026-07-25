@@ -47,12 +47,12 @@ export function startREPL(opts = {}) {
     }
 
     try {
-      setCliBusy(true);
+      
       await handler({ text });
     } catch (e) {
       console.error(`CLI error: ${e.message}`);
     } finally {
-      setCliBusy(false);
+      
       refreshPrompt();
       drainCliQueue().catch(() => {});
     }
