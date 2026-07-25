@@ -193,6 +193,8 @@ if (isTTY) {
     startPolling(telegramHandler);
   }
 
+  launchCron();
+
   console.log(chalk.cyan(`
 Interactive mode ready.
 Deploy setting: ${config.management.deployAmountSol} SOL per position
