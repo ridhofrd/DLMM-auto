@@ -59,6 +59,7 @@ export const config = {
     maxBinStep: u.maxBinStep ?? 125,
     timeframe: u.timeframe ?? "5m",
     category: u.category ?? "trending",
+    enableGmgn: u.enableGmgn ?? false, // toggle gmgn cli usage
     minTokenFeesSol: u.minTokenFeesSol ?? 30,  // global fees paid (priority+jito tips). below = bundled/scam
     useDiscordSignals: u.useDiscordSignals ?? false,
     discordSignalMode: u.discordSignalMode ?? "merge", // merge | only
@@ -260,6 +261,7 @@ export function reloadScreeningThresholds() {
     if (fresh.maxBinStep != null) s.maxBinStep = fresh.maxBinStep;
     if (fresh.timeframe != null) s.timeframe = fresh.timeframe;
     if (fresh.category != null) s.category = fresh.category;
+    if (fresh.enableGmgn !== undefined) s.enableGmgn = fresh.enableGmgn;
     if (fresh.minTokenAgeHours !== undefined) s.minTokenAgeHours = fresh.minTokenAgeHours;
     if (fresh.maxTokenAgeHours !== undefined) s.maxTokenAgeHours = fresh.maxTokenAgeHours;
     if (fresh.athFilterPct !== undefined) s.athFilterPct = fresh.athFilterPct;

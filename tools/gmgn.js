@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import { execSync } from "child_process";
 import { log } from "../logger.js";
 
@@ -84,10 +85,15 @@ export async function getGMGNKlines(mint, resolution = "1h", limit = 50) {
   }
 }
 
+
 /**
  * Combined token analysis for screening.
  */
 export async function getGMGNTokenAnalysis(mint) {
+  if (!config.screening.enableGmgn) {
+    return null;
+  }
+
   const [security, stats, klines] = await Promise.all([
     getGMGNTokenSecurity(mint),
     getGMGNTokenStats(mint),

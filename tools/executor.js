@@ -448,8 +448,8 @@ export async function executeTool(name, args) {
           const mint = pool?.lbPair?.tokenXMint?.toString();
           if (mint) {
             const gmgn = await getGMGNTokenAnalysis(mint);
-            gmgn_risk = gmgn.security?.risk_level;
-            gmgn_sm = gmgn.stats?.smart_money_count;
+            gmgn_risk = gmgn?.security?.risk_level;
+            gmgn_sm = gmgn?.stats?.smart_money_count;
           }
         } catch (e) { /* ignore */ }
 
