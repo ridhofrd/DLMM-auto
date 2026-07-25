@@ -128,6 +128,7 @@ export function splitTelegramPlainChunks(text, maxLen = TELEGRAM_MAX_MESSAGE) {
 
 /** Send text as one or more messages (avoids 4096 truncation). */
 export async function sendLongPlainText(text) {
+  console.log(`\n[BOT LONG] ${text}\n`);
   if (!TOKEN || !chatId) return;
   const parts = splitTelegramPlainChunks(text);
   for (let i = 0; i < parts.length; i++) {
@@ -136,11 +137,13 @@ export async function sendLongPlainText(text) {
 }
 
 export async function sendMessage(text) {
+  console.log(`\n[BOT] ${text}\n`);
   if (!TOKEN || !chatId) return;
   return postTelegram("sendMessage", { text: String(text).slice(0, TELEGRAM_MAX_MESSAGE) });
 }
 
 export async function sendHTML(html) {
+  console.log(`\n[BOT HTML] ${html.replace(/<[^>]*>?/gm, '')}\n`);
   if (!TOKEN || !chatId) return;
   return postTelegram("sendMessage", { text: html.slice(0, TELEGRAM_MAX_MESSAGE), parse_mode: "HTML" });
 }
