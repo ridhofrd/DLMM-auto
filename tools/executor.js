@@ -135,7 +135,7 @@ const toolMap = {
     const { sendLongPlainText, telegramEnabled } = await import("../telegram.js");
     const { config } = await import("../config.js");
     if (!config.dryRun && telegramEnabled()) {
-      sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${pool_address}\nDecision: ⛔ DISCARDED\nReason: ${reason}`).catch(() => {});
+      sendLongPlainText(`🔭 Final Decision (Observation Exceeded)\n\nPool: ${pool_address}\nDecision: ⛔ DISCARDED\nReason: ${reason}`).catch(() => { });
     }
     return { success: true, message: `Discarded ${pool_address}. Reason: ${reason}` };
   },

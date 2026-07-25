@@ -14,16 +14,16 @@ export function evaluateTrackedPool(trackedPool, currentDetail, configScreening,
   const delta = newVcp - trackedPool.initial_volume_change_pct;
 
   if (delta >= configScreening.accelerationThresholdPct) {
-    return { 
-      action: "PROMOTE", 
-      delta, 
-      newVcp, 
-      thresholdRequired: configScreening.accelerationThresholdPct 
+    return {
+      action: "PROMOTE",
+      delta,
+      newVcp,
+      thresholdRequired: configScreening.accelerationThresholdPct
     };
   }
 
-  return { 
-    action: "DISCARD", 
+  return {
+    action: "DISCARD",
     reason: `Volume did not accelerate enough (${delta.toFixed(2)}% < ${configScreening.accelerationThresholdPct}% req)`,
     delta
   };
