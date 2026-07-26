@@ -85,22 +85,23 @@ function startCronJobs() {
   _cronTasks.push(mgmtTask, screenTask, briefingTask);
 
   if (!config.api.lpAgentRelayEnabled) {
-    const PNL_POLL_INTERVAL_MS = 60_000; 
+    const PNL_POLL_INTERVAL_MS = 60_000;
     _cronTasks._pnlPollInterval = setInterval(async () => {
       if (isManagementBusy() || isScreeningBusy()) return;
       try {
         const { positions } = await getMyPositions({ force: true, silent: true });
         if (!positions || positions.length === 0) return;
-        const stateChanges = await updatePnlAndCheckExits(positions);
-        
         let shouldTriggerManagement = false;
-        
-        for (const [poolAddress, change] of Object.entries(stateChanges)) {
-          if (change.shouldConfirmPeak || change.shouldConfirmDrop) {
-            // Rechecks are queued, handled internally by state/trailing-confirm
-          } else if (change.shouldTriggerExit) {
-            log("cron", `Poller detected exit condition for ${poolAddress} — triggering management`);
-            shouldTriggerManagement = true;
+
+        for (const pos of positions) {
+          const exit = updatePnlAndCheckExits(pos.position, pos, config.management);
+          if (exit) {
+            if (exit.needs_confirmation) {
+              // Rechecks are queued, handled internally by state/trailing-confirm
+            } else {
+              log("cron", `Poller detected exit condition for ${pos.pair || pos.position} — triggering management`);
+              shouldTriggerManagement = true;
+            }
           }
         }
 
@@ -185,11 +186,11 @@ if (isTTY) {
   });
 
   const { rl } = repl;
-  
+
   function launchCron() {
     log("startup", "Starting cron cycles...");
     startCronJobs();
-    maybeRunMissedBriefing().catch(() => {});
+    maybeRunMissedBriefing().catch(() => { });
     startPolling(telegramHandler);
   }
 
@@ -230,7 +231,7 @@ Commands:
   // Non-TTY mode
   log("startup", "Non-TTY mode — starting cron cycles immediately.");
   startCronJobs();
-  maybeRunMissedBriefing().catch(() => {});
+  maybeRunMissedBriefing().catch(() => { });
   startPolling(telegramHandler);
   (async () => {
     try {
