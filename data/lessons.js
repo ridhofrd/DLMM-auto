@@ -9,13 +9,13 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { log } from "./logger.js";
-import { getSharedLessonsForPrompt, pushHiveLesson, pushHivePerformanceEvent } from "./hivemind.js";
+import { log } from "../logger.js";
+import { getSharedLessonsForPrompt, pushHiveLesson, pushHivePerformanceEvent } from "../hivemind.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USER_CONFIG_PATH = path.join(__dirname, "user-config.json");
 
-const LESSONS_FILE = "./lessons.json";
+const LESSONS_FILE = "./data/lessons.json";
 const MIN_EVOLVE_POSITIONS = 5;   // don't evolve until we have real data
 const MAX_CHANGE_PER_STEP = 0.20; // never shift a threshold more than 20% at once
 const MAX_MANUAL_LESSON_LENGTH = 400;
@@ -152,7 +152,7 @@ export async function recordPerformance(perf) {
 
   // Evolve thresholds every 5 closed positions (if enabled)
   if (data.performance.length % MIN_EVOLVE_POSITIONS === 0) {
-    const { config, reloadScreeningThresholds } = await import("./config.js");
+    const { config, reloadScreeningThresholds } = await import("../config.js");
 
     if (config.autoEvolve) {
       const result = evolveThresholds(data.performance, config);

@@ -4,9 +4,9 @@ import { getWalletBalances } from "./tools/wallet.js";
 import { getMyPositions } from "./tools/dlmm.js";
 import { log } from "./logger.js";
 import { config } from "./config.js";
-import { getStateSummary } from "./state.js";
-import { getLessonsForPrompt, getPerformanceSummary } from "./lessons.js";
-import { getDecisionSummary } from "./decision-log.js";
+import { getStateSummary } from "./data/state.js";
+import { getLessonsForPrompt, getPerformanceSummary } from "./data/lessons.js";
+import { getDecisionSummary } from "./data/decision-log.js";
 
 import { getToolsForRole, shouldRequireRealToolUse } from "./src/agent/intent.js";
 import { buildMessages, chatCompletionWithRetry } from "./src/agent/llm-client.js";
@@ -37,7 +37,7 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
   let weightsSummary = null;
   if (agentType === "SCREENER") {
     try {
-      const { getWeightsSummary } = await import("./signal-weights.js");
+      const { getWeightsSummary } = await import("./data/signal-weights.js");
       const { config } = await import("./config.js");
       if (config.darwin?.enabled) weightsSummary = getWeightsSummary();
     } catch { /* signal-weights not critical */ }

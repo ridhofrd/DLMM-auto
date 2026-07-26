@@ -5,7 +5,7 @@ import { config } from "./config.js";
 import { registerCronRestarter } from "./tools/executor.js";
 import { startPolling, stopPolling, isEnabled as telegramEnabled, sendHTML } from "./telegram.js";
 import { generateBriefing } from "./briefing.js";
-import { getLastBriefingDate, setLastBriefingDate, updatePnlAndCheckExits } from "./state.js";
+import { getLastBriefingDate, setLastBriefingDate, updatePnlAndCheckExits } from "./data/state.js";
 import { startUIServer } from "./ui-server.js";
 import { bootstrapHiveMind, ensureAgentId, startHiveMindBackgroundSync } from "./hivemind.js";
 import { runManagementCycle, runScreeningCycle, isManagementBusy, isScreeningBusy, timers } from "./src/cycles/index.js";

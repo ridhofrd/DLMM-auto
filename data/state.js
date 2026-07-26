@@ -9,10 +9,10 @@
  */
 
 import fs from "fs";
-import { log } from "./logger.js";
-import { checkExitConditions } from "./src/domain/position.js";
+import { log } from "../logger.js";
+import { checkExitConditions } from "../src/domain/position.js";
 
-const STATE_FILE = "./state.json";
+const STATE_FILE = "./data/state.json";
 
 const MAX_RECENT_EVENTS = 20;
 const MAX_INSTRUCTION_LENGTH = 280;

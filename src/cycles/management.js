@@ -4,8 +4,8 @@ import { getMyPositions, closePosition, claimFees } from "../../tools/dlmm.js";
 import { getWalletBalances, swapToken } from "../../tools/wallet.js";
 import { config } from "../../config.js";
 import { isEnabled as telegramEnabled, createLiveMessage, sendLongPlainText, notifyOutOfRange } from "../../telegram.js";
-import { getTrackedPosition, updatePnlAndCheckExits, queuePeakConfirmation, queueTrailingDropConfirmation } from "../../state.js";
-import { recordPositionSnapshot, recallForPool } from "../../pool-memory.js";
+import { getTrackedPosition, updatePnlAndCheckExits, queuePeakConfirmation, queueTrailingDropConfirmation } from "../../data/state.js";
+import { recordPositionSnapshot, recallForPool } from "../../data/pool-memory.js";
 import { agentLoop } from "../../agent.js";
 
 import { stripThink, shouldUsePnlRecheck, formatCloseReasonForAlert } from "../utils/helpers.js";

@@ -21,11 +21,11 @@ import {
   syncOpenPositions,
   updatePositionOpenMetrics,
   updatePositionSecurityMetrics,
-} from "../state.js";
-import { recordPerformance } from "../lessons.js";
-import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
+} from "../data/state.js";
+import { recordPerformance } from "../data/lessons.js";
+import { isBaseMintOnCooldown, isPoolOnCooldown } from "../data/pool-memory.js";
 import { normalizeMint } from "./wallet.js";
-import { appendDecision } from "../decision-log.js";
+import { appendDecision } from "../data/decision-log.js";
 import { agentMeridianJson, getAgentIdForRequests, getAgentMeridianHeaders } from "./agent-meridian.js";
 
 // ─── Lazy SDK loader ───────────────────────────────────────────

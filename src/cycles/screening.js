@@ -4,16 +4,16 @@ import { getWalletBalances } from "../../tools/wallet.js";
 import { config, computeDeployAmount } from "../../config.js";
 import { isEnabled as telegramEnabled, createLiveMessage, sendLongPlainText } from "../../telegram.js";
 import { getTopCandidates } from "../../tools/pool-scanner.js";
-import { getActiveStrategy } from "../../strategy-library.js";
-import { checkSmartWalletsOnPool } from "../../smart-wallets.js";
+import { getActiveStrategy } from "../../data/strategy-library.js";
+import { checkSmartWalletsOnPool } from "../../data/smart-wallets.js";
 import { getTokenNarrative, getTokenInfo } from "../../tools/token.js";
 import { getGMGNTokenAnalysis } from "../../tools/gmgn.js";
 import { evaluateTrackedPool } from "../domain/observation.js";
-import { recallForPool } from "../../pool-memory.js";
-import { appendDecision } from "../../decision-log.js";
+import { recallForPool } from "../../data/pool-memory.js";
+import { appendDecision } from "../../data/decision-log.js";
 import { agentLoop } from "../../agent.js";
 import { stageSignals } from "../../signal-tracker.js";
-import { getWeightsSummary } from "../../signal-weights.js";
+import { getWeightsSummary } from "../../data/signal-weights.js";
 
 import { stripThink, sanitizeUntrustedPromptText } from "../utils/helpers.js";
 import { isScreeningBusy, setScreeningBusy, setScreeningLastTriggered, timers } from "./concurrency.js";
@@ -82,7 +82,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
 
   // Capture market conditions at screening time
   try {
-    const { takeMarketSnapshot } = await import("../../market-snapshot.js");
+    const { takeMarketSnapshot } = await import("../../data/market-snapshot.js");
     await takeMarketSnapshot({ trigger: "screening_cycle" });
   } catch (snapErr) {
     log("snapshot_warn", `Market snapshot failed: ${snapErr.message}`);

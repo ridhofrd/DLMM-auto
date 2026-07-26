@@ -11,18 +11,18 @@ import {
 } from "./dlmm.js";
 import { getWalletBalances, swapToken } from "./wallet.js";
 import { studyTopLPers } from "./study.js";
-import { addLesson, clearAllLessons, clearPerformance, removeLessonsByKeyword, getPerformanceHistory, pinLesson, unpinLesson, listLessons } from "../lessons.js";
-import { setPositionInstruction } from "../state.js";
+import { addLesson, clearAllLessons, clearPerformance, removeLessonsByKeyword, getPerformanceHistory, pinLesson, unpinLesson, listLessons } from "../data/lessons.js";
+import { setPositionInstruction } from "../data/state.js";
 
-import { getPoolMemory, addPoolNote } from "../pool-memory.js";
+import { getPoolMemory, addPoolNote } from "../data/pool-memory.js";
 import { queueForTracking } from "./pool-tracker.js";
-import { addStrategy, listStrategies, getStrategy, setActiveStrategy, removeStrategy } from "../strategy-library.js";
-import { addToBlacklist, removeFromBlacklist, listBlacklist } from "../token-blacklist.js";
-import { blockDev, unblockDev, listBlockedDevs } from "../dev-blocklist.js";
-import { addSmartWallet, removeSmartWallet, listSmartWallets, checkSmartWalletsOnPool } from "../smart-wallets.js";
+import { addStrategy, listStrategies, getStrategy, setActiveStrategy, removeStrategy } from "../data/strategy-library.js";
+import { addToBlacklist, removeFromBlacklist, listBlacklist } from "../data/token-blacklist.js";
+import { blockDev, unblockDev, listBlockedDevs } from "../data/dev-blocklist.js";
+import { addSmartWallet, removeSmartWallet, listSmartWallets, checkSmartWalletsOnPool } from "../data/smart-wallets.js";
 import { getTokenInfo, getTokenHolders, getTokenNarrative } from "./token.js";
 import { config, reloadScreeningThresholds } from "../config.js";
-import { getRecentDecisions } from "../decision-log.js";
+import { getRecentDecisions } from "../data/decision-log.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";

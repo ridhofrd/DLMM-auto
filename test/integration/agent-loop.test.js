@@ -70,7 +70,7 @@ jest.unstable_mockModule("../../tools/gmgn.js", () => ({
   getGMGNTokenAnalysis: jest.fn().mockResolvedValue(null)
 }));
 
-jest.unstable_mockModule("../../smart-wallets.js", () => ({
+jest.unstable_mockModule("../../data/smart-wallets.js", () => ({
   checkSmartWalletsOnPool: jest.fn().mockResolvedValue([])
 }));
 

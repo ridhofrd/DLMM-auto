@@ -6,9 +6,9 @@
  */
 
 import fs from "fs";
-import { log } from "./logger.js";
+import { log } from "../logger.js";
 
-const BLACKLIST_FILE = "./token-blacklist.json";
+const BLACKLIST_FILE = "./data/token-blacklist.json";
 
 function load() {
   if (!fs.existsSync(BLACKLIST_FILE)) return {};

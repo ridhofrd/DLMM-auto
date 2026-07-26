@@ -7,9 +7,9 @@ import { getMyPositions, closePosition } from "../../tools/dlmm.js";
 import { executeTool } from "../../tools/executor.js";
 import { agentLoop } from "../../agent.js";
 import { generateBriefing } from "../../briefing.js";
-import { setPositionInstruction } from "../../state.js";
+import { setPositionInstruction } from "../../data/state.js";
 import { ensureAgentId, getHiveMindPullMode, isHiveMindEnabled, pullHiveMindLessons, pullHiveMindPresets, registerHiveMindAgent } from "../../hivemind.js";
-import { getPerformanceSummary, evolveThresholds } from "../../lessons.js";
+import { getPerformanceSummary, evolveThresholds } from "../../data/lessons.js";
 import { reloadScreeningThresholds } from "../../config.js";
 import { getTopCandidates } from "../../tools/pool-scanner.js";
 

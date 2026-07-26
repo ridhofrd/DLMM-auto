@@ -1,5 +1,5 @@
 import { loadConfig, loadAccounts } from "./config.js";
-import { loadState, saveState, getAccountMeta, pushRotationHistory, setCooldown } from "./state.js";
+import { loadState, saveState, getAccountMeta, pushRotationHistory, setCooldown } from "./data/state.js";
 import { createLogger } from "./logger.js";
 import { patchEnv } from "./env-patcher.js";
 import { selectNext, markAccount, listAccountsWithMeta } from "./pool.js";

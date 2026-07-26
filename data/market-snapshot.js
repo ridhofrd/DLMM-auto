@@ -14,8 +14,8 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { log } from "./logger.js";
-import { config } from "./config.js";
+import { log } from "../logger.js";
+import { config } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SNAPSHOT_FILE = path.join(__dirname, "market-snapshots.json");

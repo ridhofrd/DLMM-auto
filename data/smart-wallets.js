@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { log } from "./logger.js";
+import { log } from "../logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WALLETS_PATH = path.join(__dirname, "smart-wallets.json");
@@ -69,7 +69,7 @@ export async function checkSmartWalletsOnPool({ pool_address }) {
     };
   }
 
-  const { getWalletPositions } = await import("./tools/dlmm.js");
+  const { getWalletPositions } = await import("../tools/dlmm.js");
 
   const results = await Promise.all(
     wallets.map(async (wallet) => {
