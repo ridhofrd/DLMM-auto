@@ -1296,7 +1296,7 @@ export async function closePosition({ position_address, reason, closed_volume_ch
     let current_closed_volume_change = closed_volume_change;
     if (current_closed_volume_change == null) {
       try {
-        const { getPoolDetail } = await import("./screening.js");
+        const { getPoolDetail } = await import("./pool-scanner.js");
         const detail = await getPoolDetail({ pool_address: poolAddress, timeframe: "5m" });
         current_closed_volume_change = detail?.volume_change_pct;
       } catch (e) {

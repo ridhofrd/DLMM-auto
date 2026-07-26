@@ -26,7 +26,7 @@ tools/
   definitions.js    Tool schemas in OpenAI format (what LLM sees)
   executor.js       Tool dispatch: name → fn, safety checks, pre/post hooks
   dlmm.js           Meteora DLMM SDK wrapper (deploy, close, claim, positions, PnL)
-  screening.js      Pool discovery from Meteora API
+  pool-scanner.js   Pool discovery from Meteora API
   wallet.js         SOL/token balances (Helius) + Jupiter swap
   token.js          Token info/holders/narrative (Jupiter API)
   study.js          Top LPer study via LPAgent API

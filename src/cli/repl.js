@@ -1,7 +1,7 @@
 import readline from "readline";
 import chalk from "chalk";
-import { isManagementBusy, isScreeningBusy } from "../cycles/state.js";
-import { isCliBusy, setCliBusy } from "./state.js";
+import { isManagementBusy, isScreeningBusy } from "../cycles/concurrency.js";
+import { isCliBusy, setCliBusy } from "./concurrency.js";
 import { createTelegramHandler } from "../interfaces/telegram-handler.js";
 
 const _cliQueue = [];

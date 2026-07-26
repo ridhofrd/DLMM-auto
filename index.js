@@ -13,7 +13,7 @@ import { createTelegramHandler } from "./src/interfaces/telegram-handler.js";
 import { startREPL } from "./src/cli/repl.js";
 import { checkSuspectPnl, checkVolumeGuard } from "./src/domain/position.js";
 import { getMyPositions } from "./tools/dlmm.js";
-import { getPollTriggeredAt, setPollTriggeredAt } from "./src/cycles/state.js";
+import { getPollTriggeredAt, setPollTriggeredAt } from "./src/cycles/concurrency.js";
 import chalk from "chalk";
 
 startUIServer();

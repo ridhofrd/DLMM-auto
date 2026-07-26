@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 
 // Mock dependencies
-jest.unstable_mockModule("../../tools/screening.js", () => ({
+jest.unstable_mockModule("../../tools/pool-scanner.js", () => ({
   getTopCandidates: jest.fn(),
 }));
 
@@ -20,7 +20,7 @@ jest.unstable_mockModule("../../config.js", () => ({
   computeDeployAmount: jest.fn(),
 }));
 
-jest.unstable_mockModule("./state.js", () => {
+jest.unstable_mockModule("./concurrency.js", () => {
   let _candidates = [];
   return {
     setLatestCandidates: jest.fn((c) => { _candidates = c; }),
@@ -44,7 +44,7 @@ describe("CLI Actions", () => {
     runDeterministicScreen = actions.runDeterministicScreen;
     deployLatestCandidate = actions.deployLatestCandidate;
 
-    const screening = await import("../../tools/screening.js");
+    const screening = await import("../../tools/pool-scanner.js");
     getTopCandidates = screening.getTopCandidates;
 
     const wallet = await import("../../tools/wallet.js");
@@ -56,7 +56,7 @@ describe("CLI Actions", () => {
     const configMod = await import("../../config.js");
     computeDeployAmount = configMod.computeDeployAmount;
 
-    const state = await import("./state.js");
+    const state = await import("./concurrency.js");
     setLatestCandidates = state.setLatestCandidates;
     getLatestCandidatesMeta = state.getLatestCandidatesMeta;
   });

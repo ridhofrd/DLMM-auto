@@ -10,7 +10,7 @@ import { agentLoop } from "../../agent.js";
 
 import { stripThink, shouldUsePnlRecheck, formatCloseReasonForAlert } from "../utils/helpers.js";
 import { schedulePeakConfirmation, scheduleTrailingDropConfirmation } from "./trailing-confirm.js";
-import { isManagementBusy, setManagementBusy, timers, getScreeningLastTriggered } from "./state.js";
+import { isManagementBusy, setManagementBusy, timers, getScreeningLastTriggered } from "./concurrency.js";
 
 let _triggerScreeningFn = null;
 export function setScreeningTrigger(fn) {
@@ -99,7 +99,7 @@ export async function runManagementCycle({ silent = false } = {}) {
       const vg = config.management.volumeGuard;
       if (vg?.enabled && (p.age_minutes ?? 0) >= vg.waitMinutes) {
         try {
-          const { getPoolDetail } = await import("../../tools/screening.js");
+          const { getPoolDetail } = await import("../../tools/pool-scanner.js");
           const detail = await getPoolDetail({ pool_address: p.pool, timeframe: vg.timeframe });
           
           const currentStrikes = _volumeGuardStrikes.get(p.position) ?? 0;

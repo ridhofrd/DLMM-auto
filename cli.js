@@ -309,7 +309,7 @@ switch (subcommand) {
 
   // ── candidates ───────────────────────────────────────────────────
   case "candidates": {
-    const { getTopCandidates } = await import("./tools/screening.js");
+    const { getTopCandidates } = await import("./tools/pool-scanner.js");
     const { getActiveBin } = await import("./tools/dlmm.js");
     const { getTokenInfo, getTokenHolders, getTokenNarrative } = await import("./tools/token.js");
     const { checkSmartWalletsOnPool } = await import("./smart-wallets.js");
@@ -412,7 +412,7 @@ switch (subcommand) {
   // ── pool-detail ───────────────────────────────────────────────
   case "pool-detail": {
     if (!flags.pool) die("Usage: meridian pool-detail --pool <addr> [--timeframe 5m]");
-    const { getPoolDetail } = await import("./tools/screening.js");
+    const { getPoolDetail } = await import("./tools/pool-scanner.js");
     out(await getPoolDetail({ pool_address: flags.pool, timeframe: flags.timeframe || "5m" }));
     break;
   }

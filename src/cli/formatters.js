@@ -1,6 +1,6 @@
 import { config, computeDeployAmount } from "../../config.js";
 import { isHiveMindEnabled } from "../../hivemind.js";
-import { getLatestCandidatesMeta } from "./state.js";
+import { getLatestCandidatesMeta } from "./concurrency.js";
 
 export function formatCandidates(candidates) {
   if (!candidates.length) return "  No eligible pools found right now.";

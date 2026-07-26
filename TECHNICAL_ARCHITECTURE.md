@@ -37,7 +37,7 @@ This is where the business logic of the agent lives, strictly separated into cyc
 These files govern what the agent does in the background without human intervention.
 *   `management.js`: Iterates over active on-chain positions. Evaluates deterministic exit rules (Volume Guard, Stop Loss) and trailing TP conditions. If an action is required (e.g., `CLOSE` or `CLAIM`), it executes the action.
 *   `screening.js`: Scans the market for new pools, evaluates them against volume/liquidity thresholds, and builds prompts for the LLM to decide on capital deployment.
-*   `state.js`: Manages the background concurrency locks (`isManagementBusy`, `isScreeningBusy`) to prevent overlapping jobs.
+*   `concurrency.js`: Manages the background concurrency locks (`isManagementBusy`, `isScreeningBusy`) to prevent overlapping jobs.
 *   `trailing-confirm.js`: Handles the 15-second pending states for Trailing TP verification (ensuring PnL drops aren't RPC glitches before selling).
 
 ### `src/agent/` (LLM Orchestration)
@@ -53,7 +53,7 @@ Isolated logic functions containing zero I/O or side effects, making them highly
 ### `src/cli/` (Command Line Interface)
 *   `repl.js`: Sets up the interactive Read-Eval-Print Loop (the console interface).
 *   `actions.js`: Maps slash commands (e.g., `/deploy`, `/status`) to the underlying tool functions.
-*   `state.js`: Manages CLI concurrency locks (`isCliBusy`). Ensures that user commands wait in a queue if the agent is actively executing a background cron job.
+*   `concurrency.js`: Manages CLI concurrency locks (`isCliBusy`). Ensures that user commands wait in a queue if the agent is actively executing a background cron job.
 *   `formatters.js`: UI text formatting for terminal output.
 
 ### `src/interfaces/`
@@ -66,7 +66,7 @@ The `tools/` directory acts as the **I/O Layer**. It handles all external API re
 
 *   `dlmm.js`: Interacts directly with Meteora's DLMM SDK on Solana. Handles deploying capital, closing positions, and claiming fees.
 *   `wallet.js`: Fetches Solana wallet balances and handles basic Jupiter swaps.
-*   `screening.js`: Fetches real-time pool data, liquidity metrics, and recent volume for the screening cycle.
+*   `pool-scanner.js`: Fetches real-time pool data, liquidity metrics, and recent volume for the screening cycle.
 *   `gmgn.js`: Interacts with the GMGN API to fetch safety and security scores (e.g., checking for honeypots or malicious token contracts).
 *   `pool-tracker.js`: Maintains an internal memory of pools observed over time to calculate velocity and acceleration of liquidity.
 *   `definitions.js`: JSON Schema definitions that map these JavaScript functions into strictly typed tools that the LLM can invoke.

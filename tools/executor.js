@@ -1,4 +1,4 @@
-import { discoverPools, getPoolDetail, getTopCandidates } from "./screening.js";
+import { discoverPools, getPoolDetail, getTopCandidates } from "./pool-scanner.js";
 import {
   getActiveBin,
   deployPosition,

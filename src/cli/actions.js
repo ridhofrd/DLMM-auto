@@ -1,8 +1,8 @@
-import { getTopCandidates } from "../../tools/screening.js";
+import { getTopCandidates } from "../../tools/pool-scanner.js";
 import { getWalletBalances } from "../../tools/wallet.js";
 import { executeTool } from "../../tools/executor.js";
 import { config, computeDeployAmount } from "../../config.js";
-import { setLatestCandidates, getLatestCandidatesMeta } from "./state.js";
+import { setLatestCandidates, getLatestCandidatesMeta } from "./concurrency.js";
 
 export async function runDeterministicScreen(limit = 5) {
   const top = await getTopCandidates({ limit });

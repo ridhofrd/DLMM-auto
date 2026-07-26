@@ -462,7 +462,7 @@ tools/
   definitions.js    Tool schemas (OpenAI format)
   executor.js       Tool dispatch + safety checks
   dlmm.js           Meteora DLMM SDK wrapper
-  screening.js      Pool discovery
+  pool-scanner.js   Pool discovery
   wallet.js         SOL/token balances + Jupiter swap
   token.js          Token info, holders, narrative
   study.js          Top LPer study via LPAgent API

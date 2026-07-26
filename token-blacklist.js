@@ -28,7 +28,7 @@ function save(data) {
 
 /**
  * Returns true if the mint is on the blacklist.
- * Used in screening.js before returning pools to the LLM.
+ * Used in pool-scanner.js before returning pools to the LLM.
  */
 export function isBlacklisted(mint) {
   if (!mint) return false;

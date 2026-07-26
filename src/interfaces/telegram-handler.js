@@ -11,10 +11,10 @@ import { setPositionInstruction } from "../../state.js";
 import { ensureAgentId, getHiveMindPullMode, isHiveMindEnabled, pullHiveMindLessons, pullHiveMindPresets, registerHiveMindAgent } from "../../hivemind.js";
 import { getPerformanceSummary, evolveThresholds } from "../../lessons.js";
 import { reloadScreeningThresholds } from "../../config.js";
-import { getTopCandidates } from "../../tools/screening.js";
+import { getTopCandidates } from "../../tools/pool-scanner.js";
 
-import { isManagementBusy, isScreeningBusy } from "../cycles/state.js";
-import { isCliBusy, setCliBusy, sessionHistory, appendHistory } from "../cli/state.js";
+import { isManagementBusy, isScreeningBusy } from "../cycles/concurrency.js";
+import { isCliBusy, setCliBusy, sessionHistory, appendHistory } from "../cli/concurrency.js";
 import { formatHelpText, formatWalletStatus, formatConfigSnapshot, parseConfigValue, describeLatestCandidates, formatCandidates } from "../cli/formatters.js";
 import { runDeterministicScreen, deployLatestCandidate } from "../cli/actions.js";
 import { stripThink } from "../utils/helpers.js";

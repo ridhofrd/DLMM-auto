@@ -6,7 +6,7 @@ import {
   clearHistory,
   getLatestCandidatesMeta,
   setLatestCandidates
-} from "./state.js";
+} from "./concurrency.js";
 
 describe("CLI State", () => {
   beforeEach(() => {

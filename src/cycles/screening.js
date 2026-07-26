@@ -3,7 +3,7 @@ import { getMyPositions, getActiveBin } from "../../tools/dlmm.js";
 import { getWalletBalances } from "../../tools/wallet.js";
 import { config, computeDeployAmount } from "../../config.js";
 import { isEnabled as telegramEnabled, createLiveMessage, sendLongPlainText } from "../../telegram.js";
-import { getTopCandidates } from "../../tools/screening.js";
+import { getTopCandidates } from "../../tools/pool-scanner.js";
 import { getActiveStrategy } from "../../strategy-library.js";
 import { checkSmartWalletsOnPool } from "../../smart-wallets.js";
 import { getTokenNarrative, getTokenInfo } from "../../tools/token.js";
@@ -16,7 +16,7 @@ import { stageSignals } from "../../signal-tracker.js";
 import { getWeightsSummary } from "../../signal-weights.js";
 
 import { stripThink, sanitizeUntrustedPromptText } from "../utils/helpers.js";
-import { isScreeningBusy, setScreeningBusy, setScreeningLastTriggered, timers } from "./state.js";
+import { isScreeningBusy, setScreeningBusy, setScreeningLastTriggered, timers } from "./concurrency.js";
 
 export async function runScreeningCycle({ silent = false } = {}) {
   if (isScreeningBusy()) {
@@ -234,7 +234,7 @@ export async function runScreeningCycle({ silent = false } = {}) {
     // Evaluate tracked pools
     const trackedPoolBlocks = [];
     if (config.screening.enablePoolObservation) {
-      const { getPoolDetail } = await import("../../tools/screening.js");
+      const { getPoolDetail } = await import("../../tools/pool-scanner.js");
       for (const p of trackedPools) {
         let detail = null;
         try {

@@ -21,7 +21,7 @@ This bot runs autonomous background cycles (`management` and `screening`) alongs
 *   **Verification Command:** Run `npm test` to execute all tests. Do not declare a task complete unless this command passes.
 
 ## 4. LLM Prompting Another LLM
-*   This codebase invokes other LLMs programmatically (in `screening.js` and `management.js`) to make deployment decisions.
+*   This codebase invokes other LLMs programmatically (in `pool-scanner.js` and `management.js`) to make deployment decisions.
 *   If you are modifying strings that contain prompts, be highly aware that you are shaping the instructions for an embedded AI. Keep prompts concise, strictly formatted, and deterministic where possible.
 
 ## 5. State Persistence

@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 import { EventEmitter } from "events";
-import { setScreeningBusy, setManagementBusy } from "../../src/cycles/state.js";
-import { setCliBusy } from "../../src/cli/state.js";
+import { setScreeningBusy, setManagementBusy } from "../../src/cycles/concurrency.js";
+import { setCliBusy } from "../../src/cli/concurrency.js";
 
 // Mock the telegram-handler module so it doesn't actually hit the network
 const handlerSpy = jest.fn().mockResolvedValue();

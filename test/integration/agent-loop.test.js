@@ -1,5 +1,5 @@
 import { jest } from "@jest/globals";
-import { setScreeningBusy, isScreeningBusy } from "../../src/cycles/state.js";
+import { setScreeningBusy, isScreeningBusy } from "../../src/cycles/concurrency.js";
 
 // Mock the LLM client to return a predictable response
 const mockChatCompletion = jest.fn();
@@ -48,7 +48,7 @@ jest.unstable_mockModule("../../tools/dlmm.js", () => ({
   getActiveBin: jest.fn().mockResolvedValue(100)
 }));
 
-jest.unstable_mockModule("../../tools/screening.js", () => ({
+jest.unstable_mockModule("../../tools/pool-scanner.js", () => ({
   getTopCandidates: jest.fn().mockResolvedValue({
     candidates: [{
       pool_name: "ABC",
