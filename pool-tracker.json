@@ -1,1 +1,25 @@
-{}
+{
+  "4bwdKNcrYbXHXR3TT7c7c2HDCj19C5ioUALF3j415dTN": {
+    "pool_address": "4bwdKNcrYbXHXR3TT7c7c2HDCj19C5ioUALF3j415dTN",
+    "pool_name": "sharkdog-SOL",
+    "deploy_args": {
+      "pool_address": "4bwdKNcrYbXHXR3TT7c7c2HDCj19C5ioUALF3j415dTN",
+      "amount_y": 0.1,
+      "amount_x": 0,
+      "strategy": "spot",
+      "bins_below": 57,
+      "bins_above": 0,
+      "pool_name": "sharkdog-SOL",
+      "base_mint": "8gEtFeKeRt1QREkU51dRih9pQ39PyYpRRZTyLg2v5qFn",
+      "bin_step": 100,
+      "base_fee": 2,
+      "volatility": 2.46,
+      "fee_tvl_ratio": 0.4775,
+      "organic_score": 75,
+      "volume_trend": "undefined"
+    },
+    "first_seen_at": "2026-07-26T00:44:13.720Z",
+    "initial_volume_change_pct": -52.5,
+    "llm_reasoning": "Only candidate with smart wallet presence (asteroid-top2-medium). Decent fee_tvl_ratio 0.4775, global fees 174.43 SOL above threshold, top10 12.99% not concentrated. Lower volatility 2.46 provides more stable range. TRUMP2028 had higher fees but steeper volume decline (-58.4%) and lower fee_tvl. RAKO had terrible pool memory (PnL -41.72%). sharkdog is best of weak bunch."
+  }
+}
