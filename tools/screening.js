@@ -448,10 +448,10 @@ export async function getTopCandidates({ limit = 10 } = {}) {
   }
 
   // Active Liquidity Distribution Screening (Configurable via user-config.json)
-  if (config.screening.enableLiquidityDistributionScreening && eligible.length > 0) {
+  if (config.screening.liquidityDistribution?.enabled && eligible.length > 0) {
     const before = eligible.length;
-    const maxConcentration = config.screening.maxLiquidityConcentrationPct ?? 85;
-    const maxAsymmetry = config.screening.maxLiquidityAsymmetry ?? 0.80;
+    const maxConcentration = config.screening.liquidityDistribution.maxConcentrationPct ?? 85;
+    const maxAsymmetry = config.screening.liquidityDistribution.maxAsymmetry ?? 0.80;
 
     const liqResults = await Promise.allSettled(
       eligible.map(p => getLiquidityMetrics(p.pool))
