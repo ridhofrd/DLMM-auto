@@ -19,6 +19,7 @@ import {
   getTrackedPosition,
   minutesOutOfRange,
   syncOpenPositions,
+  updatePositionOpenMetrics,
 } from "../state.js";
 import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
@@ -167,6 +168,81 @@ async function getPoolMetadata(poolAddress) {
     const fallback = { address: key, name: null, token_x_symbol: null, token_y_symbol: null };
     poolMetadataCache.set(key, fallback);
     return fallback;
+  }
+}
+
+// ─── Bin Depth Liquidity Metrics ───────────────────────────────
+export async function getLiquidityMetrics(poolAddress) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://dlmm.datapi.meteora.ag/pools/${poolAddress}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    const poolData = await res.json();
+    
+    const tokenXPrice = parseFloat(poolData?.token_x?.price || 0);
+    const tokenXDec = parseInt(poolData?.token_x?.decimals || 0, 10);
+    const tokenYPrice = parseFloat(poolData?.token_y?.price || 0);
+    const tokenYDec = parseInt(poolData?.token_y?.decimals || 0, 10);
+    const poolTvlUsd = parseFloat(poolData?.liquidity || 0);
+
+    if (!tokenXPrice || !tokenYPrice || !tokenXDec || !tokenYDec) {
+      throw new Error("Missing price or decimal data from pool API");
+    }
+
+    const pool = await getPool(poolAddress);
+    const activeBin = await pool.getActiveBin();
+    const activeBinId = activeBin.binId;
+    const { bins } = await pool.getBinsAroundActiveBin(20, 20);
+
+    let activeBinUsd = 0;
+    let nearUsd = 0;
+    let wideUsd = 0;
+    let belowActiveUsd = 0;
+    let aboveActiveUsd = 0;
+
+    for (const bin of bins) {
+      const xStr = bin.xAmount || "0";
+      const yStr = bin.yAmount || "0";
+      
+      const xVal = new BN(xStr, 16);
+      const yVal = new BN(yStr, 16);
+      
+      const xUsd = (Number(xVal.toString()) / Math.pow(10, tokenXDec)) * tokenXPrice;
+      const yUsd = (Number(yVal.toString()) / Math.pow(10, tokenYDec)) * tokenYPrice;
+      const binUsd = xUsd + yUsd;
+
+      wideUsd += binUsd;
+
+      if (Math.abs(bin.binId - activeBinId) <= 5) {
+        nearUsd += binUsd;
+      }
+
+      if (bin.binId === activeBinId) {
+        activeBinUsd += binUsd;
+      } else if (bin.binId < activeBinId) {
+        belowActiveUsd += binUsd;
+      } else {
+        aboveActiveUsd += binUsd;
+      }
+    }
+
+    const concentrationPct = wideUsd > 0 ? (nearUsd / wideUsd) * 100 : 0;
+    const asymmetry = (belowActiveUsd + activeBinUsd / 2) / (wideUsd || 1); // 0.0 to 1.0 (0=all above, 1=all below)
+
+    return {
+      active_bin_liquidity_usd: activeBinUsd,
+      near_bin_liquidity_usd: nearUsd,
+      wide_bin_liquidity_usd: wideUsd,
+      bin_depth_concentration_pct: concentrationPct,
+      bin_depth_asymmetry: asymmetry,
+      pool_tvl_at_entry_usd: poolTvlUsd,
+    };
+  } catch (err) {
+    log("pool_meta_warn", `Failed to get liquidity metrics for ${poolAddress.slice(0, 8)}: ${err.message}`);
+    return null;
   }
 }
 
@@ -539,6 +615,13 @@ export async function deployPosition({
       initial_value_usd,
       initial_volume_change_pct,
       deployed_volume_change,
+    });
+
+    // Async fetch liquidity metrics to avoid blocking deployment
+    getLiquidityMetrics(pool_address).then((metrics) => {
+      if (metrics) {
+        updatePositionOpenMetrics(newPosition.publicKey.toString(), metrics);
+      }
     });
 
     appendDecision({
@@ -1348,6 +1431,8 @@ export async function closePosition({ position_address, reason, closed_volume_ch
           log("close_warn", `Relay closed PnL fetch failed: ${e.message}`);
         }
 
+        const close_bin_metrics = await getLiquidityMetrics(poolAddress);
+
         await recordPerformance({
           position: position_address,
           pool: poolAddress,
@@ -1359,6 +1444,8 @@ export async function closePosition({ position_address, reason, closed_volume_ch
           volatility: tracked.volatility || null,
           fee_tvl_ratio: tracked.fee_tvl_ratio || null,
           organic_score: tracked.organic_score || null,
+          open_bin_metrics: tracked.open_bin_metrics || null,
+          close_bin_metrics,
           amount_sol: tracked.amount_sol,
           fees_earned_usd: feesUsd,
           final_value_usd: finalValueUsd,
@@ -1657,6 +1744,8 @@ export async function closePosition({ position_address, reason, closed_volume_ch
         }
       }
 
+      const close_bin_metrics = await getLiquidityMetrics(poolAddress);
+
       await recordPerformance({
         position: position_address,
         pool: poolAddress,
@@ -1668,6 +1757,8 @@ export async function closePosition({ position_address, reason, closed_volume_ch
         volatility: tracked.volatility || null,
         fee_tvl_ratio: tracked.fee_tvl_ratio || null,
         organic_score: tracked.organic_score || null,
+        open_bin_metrics: tracked.open_bin_metrics || null,
+        close_bin_metrics,
         amount_sol: tracked.amount_sol,
         fees_earned_usd: feesUsd,
         final_value_usd: finalValueUsd,
