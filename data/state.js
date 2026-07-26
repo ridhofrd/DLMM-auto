@@ -395,7 +395,7 @@ export function getStateSummary() {
  * Returns { action, reason } or null if no exit needed.
  */
 export function updatePnlAndCheckExits(position_address, positionData, mgmtConfig) {
-  const { pnl_pct: currentPnlPct, pnl_pct_suspicious, in_range, fee_per_tvl_24h } = positionData;
+  const { pnl_pct: currentPnlPct, pnl_pct_suspicious, in_range, fee_per_tvl_24h, active_bin, lower_bin, upper_bin } = positionData;
   const state = load();
   const pos = state.positions[position_address];
   if (!pos || pos.closed) return null;
@@ -422,14 +422,33 @@ export function updatePnlAndCheckExits(position_address, positionData, mgmtConfi
   }
 
   // Update OOR state
-  if (in_range === false && !pos.out_of_range_since) {
-    pos.out_of_range_since = new Date().toISOString();
-    changed = true;
-    log("state", `Position ${position_address} marked out of range`);
-  } else if (in_range === true && pos.out_of_range_since) {
-    pos.out_of_range_since = null;
-    changed = true;
-    log("state", `Position ${position_address} back in range`);
+  if (in_range === false) {
+    let oor_type = null;
+    if (active_bin != null && upper_bin != null && active_bin > upper_bin) oor_type = "upper";
+    else if (active_bin != null && lower_bin != null && active_bin < lower_bin) oor_type = "lower";
+
+    if (oor_type === "upper" && !pos.out_of_range_upper_since) {
+      pos.out_of_range_upper_since = new Date().toISOString();
+      changed = true;
+      log("state", `Position ${position_address} marked out of range (UPPER)`);
+    } else if (oor_type === "lower" && !pos.out_of_range_lower_since) {
+      pos.out_of_range_lower_since = new Date().toISOString();
+      changed = true;
+      log("state", `Position ${position_address} marked out of range (LOWER)`);
+    } else if (!oor_type && !pos.out_of_range_since) {
+      // Fallback if bin data is missing
+      pos.out_of_range_since = new Date().toISOString();
+      changed = true;
+      log("state", `Position ${position_address} marked out of range (UNKNOWN DIRECTION)`);
+    }
+  } else if (in_range === true) {
+    if (pos.out_of_range_since || pos.out_of_range_upper_since || pos.out_of_range_lower_since) {
+      pos.out_of_range_since = null;
+      pos.out_of_range_upper_since = null;
+      pos.out_of_range_lower_since = null;
+      changed = true;
+      log("state", `Position ${position_address} back in range`);
+    }
   }
 
   // Track lowest PnL

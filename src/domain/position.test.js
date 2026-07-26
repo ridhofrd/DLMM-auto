@@ -110,7 +110,7 @@ describe('Domain: Position Logic', () => {
   });
 
   describe('checkExitConditions', () => {
-    const config = { stopLossPct: -10, trailingDropPct: 5, outOfRangeWaitMinutes: 30, minFeePerTvl24h: 1.0 };
+    const config = { stopLossPct: -10, trailingDropPct: 5, outOfRangeWaitMinutesUpper: 30, outOfRangeWaitMinutesLower: 30, minFeePerTvl24h: 1.0 };
     const now = new Date('2024-01-01T12:30:00Z').getTime();
 
     it('should trigger STOP_LOSS', () => {
@@ -125,7 +125,19 @@ describe('Domain: Position Logic', () => {
       expect(result.drop_from_peak_pct).toBe(10);
     });
 
-    it('should trigger OUT_OF_RANGE if time exceeded', () => {
+    it('should trigger OUT_OF_RANGE_UPPER if upper OOR time exceeded', () => {
+      const outSince = new Date('2024-01-01T11:50:00Z').toISOString(); // 40 minutes ago
+      const result = checkExitConditions({}, { out_of_range_upper_since: outSince }, config, now);
+      expect(result.action).toBe('OUT_OF_RANGE_UPPER');
+    });
+
+    it('should trigger OUT_OF_RANGE_LOWER if lower OOR time exceeded', () => {
+      const outSince = new Date('2024-01-01T11:50:00Z').toISOString(); // 40 minutes ago
+      const result = checkExitConditions({}, { out_of_range_lower_since: outSince }, config, now);
+      expect(result.action).toBe('OUT_OF_RANGE_LOWER');
+    });
+
+    it('should trigger OUT_OF_RANGE (legacy) if time exceeded', () => {
       const outSince = new Date('2024-01-01T11:50:00Z').toISOString(); // 40 minutes ago
       const result = checkExitConditions({}, { out_of_range_since: outSince }, config, now);
       expect(result.action).toBe('OUT_OF_RANGE');

@@ -145,12 +145,34 @@ export function checkExitConditions(positionData, statePos, mgmtConfig, nowMs = 
   }
 
   // Out of range too long
+  if (statePos.out_of_range_upper_since) {
+    const minutesOOR = Math.floor((nowMs - new Date(statePos.out_of_range_upper_since).getTime()) / 60000);
+    if (minutesOOR >= mgmtConfig.outOfRangeWaitMinutesUpper) {
+      return {
+        action: "OUT_OF_RANGE_UPPER",
+        reason: `Upper OOR for ${minutesOOR}m (limit: ${mgmtConfig.outOfRangeWaitMinutesUpper}m)`,
+      };
+    }
+  }
+
+  if (statePos.out_of_range_lower_since) {
+    const minutesOOR = Math.floor((nowMs - new Date(statePos.out_of_range_lower_since).getTime()) / 60000);
+    if (minutesOOR >= mgmtConfig.outOfRangeWaitMinutesLower) {
+      return {
+        action: "OUT_OF_RANGE_LOWER",
+        reason: `Lower OOR for ${minutesOOR}m (limit: ${mgmtConfig.outOfRangeWaitMinutesLower}m)`,
+      };
+    }
+  }
+
+  // Legacy support for older tracked states
   if (statePos.out_of_range_since) {
     const minutesOOR = Math.floor((nowMs - new Date(statePos.out_of_range_since).getTime()) / 60000);
-    if (minutesOOR >= mgmtConfig.outOfRangeWaitMinutes) {
+    const legacyWait = mgmtConfig.outOfRangeWaitMinutesUpper ?? 10;
+    if (minutesOOR >= legacyWait) {
       return {
         action: "OUT_OF_RANGE",
-        reason: `Out of range for ${minutesOOR}m (limit: ${mgmtConfig.outOfRangeWaitMinutes}m)`,
+        reason: `Out of range for ${minutesOOR}m (limit: ${legacyWait}m)`,
       };
     }
   }
