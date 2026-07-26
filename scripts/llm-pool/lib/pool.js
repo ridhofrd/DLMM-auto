@@ -1,4 +1,4 @@
-import { getAccountMeta, isCooldownExpired } from "./data/state.js";
+import { getAccountMeta, isCooldownExpired } from "./state.js";
 
 export function listAccountsWithMeta(accounts, state) {
   return accounts.map((acc) => ({
