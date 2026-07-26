@@ -285,7 +285,7 @@ export async function getTopCandidates({ limit = 10 } = {}) {
   const filteredOut = [];
 
   // Exclude pools where the wallet already has an open position
-  const { getMyPositions } = await import("./dlmm.js");
+  const { getMyPositions, getLiquidityMetrics } = await import("./dlmm.js");
   const { positions } = await getMyPositions();
   const occupiedPools = new Set(positions.map((p) => p.pool));
   const occupiedMints = new Set(positions.map((p) => p.base_mint).filter(Boolean));
@@ -445,6 +445,46 @@ export async function getTopCandidates({ limit = 10 } = {}) {
       return true;
     }));
     if (eligible.length < before) log("screening", `Volume filter removed ${before - eligible.length} candidate(s)`);
+  }
+
+  // Active Liquidity Distribution Screening (Configurable via user-config.json)
+  if (config.screening.enableLiquidityDistributionScreening && eligible.length > 0) {
+    const before = eligible.length;
+    const maxConcentration = config.screening.maxLiquidityConcentrationPct ?? 85;
+    const maxAsymmetry = config.screening.maxLiquidityAsymmetry ?? 0.80;
+
+    const liqResults = await Promise.allSettled(
+      eligible.map(p => getLiquidityMetrics(p.pool))
+    );
+
+    for (let i = 0; i < eligible.length; i++) {
+      const p = eligible[i];
+      const r = liqResults[i];
+      if (r.status === "fulfilled" && r.value) {
+        p.liquidity_metrics = r.value;
+      }
+    }
+
+    eligible.splice(0, eligible.length, ...eligible.filter((p) => {
+      const metrics = p.liquidity_metrics;
+      if (!metrics) return true; // skip if we couldn't fetch metrics safely
+      
+      if (metrics.bin_depth_concentration_pct > maxConcentration) {
+        log("screening", `Liquidity filter: dropped ${p.name} — concentration ${metrics.bin_depth_concentration_pct.toFixed(2)}% > ${maxConcentration}%`);
+        pushFilteredReason(filteredOut, p, `high concentration (${metrics.bin_depth_concentration_pct.toFixed(2)}%)`);
+        return false;
+      }
+      
+      if (metrics.bin_depth_asymmetry > maxAsymmetry || metrics.bin_depth_asymmetry < (1 - maxAsymmetry)) {
+        log("screening", `Liquidity filter: dropped ${p.name} — asymmetric ${metrics.bin_depth_asymmetry.toFixed(2)} (limit: >${maxAsymmetry} or <${1 - maxAsymmetry})`);
+        pushFilteredReason(filteredOut, p, `high asymmetry (${metrics.bin_depth_asymmetry.toFixed(2)})`);
+        return false;
+      }
+      
+      return true;
+    }));
+
+    if (eligible.length < before) log("screening", `Liquidity filter removed ${before - eligible.length} candidate(s)`);
   }
 
 

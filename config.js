@@ -79,6 +79,9 @@ export const config = {
     enablePoolObservation: u.enablePoolObservation ?? true,
     observationWindowMin: u.observationWindowMin ?? 15,
     accelerationThresholdPct: u.accelerationThresholdPct ?? 0,
+    enableLiquidityDistributionScreening: u.enableLiquidityDistributionScreening ?? false,
+    maxLiquidityConcentrationPct: u.maxLiquidityConcentrationPct ?? 85,
+    maxLiquidityAsymmetry: u.maxLiquidityAsymmetry ?? 0.80,
   },
 
   // ─── Position Management ────────────────
