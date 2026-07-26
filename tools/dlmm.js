@@ -20,6 +20,7 @@ import {
   minutesOutOfRange,
   syncOpenPositions,
   updatePositionOpenMetrics,
+  updatePositionSecurityMetrics,
 } from "../state.js";
 import { recordPerformance } from "../lessons.js";
 import { isBaseMintOnCooldown, isPoolOnCooldown } from "../pool-memory.js";
@@ -622,6 +623,40 @@ export async function deployPosition({
       if (metrics) {
         updatePositionOpenMetrics(newPosition.publicKey.toString(), metrics);
       }
+    });
+
+    // Async fetch token security and holder-concentration metrics for tracking
+    Promise.allSettled([
+      import("./okx.js").then(m => m.getFullTokenAnalysis(baseMint)),
+      import("./gmgn.js").then(m => m.getGMGNTokenAnalysis(baseMint)),
+      import("./token.js").then(m => m.getTokenInfo({ query: baseMint }))
+    ]).then(([okxRes, gmgnRes, jupRes]) => {
+      const okx = okxRes.status === "fulfilled" ? okxRes.value : null;
+      const gmgn = gmgnRes.status === "fulfilled" ? gmgnRes.value : null;
+      const jup = jupRes.status === "fulfilled" ? jupRes.value : null;
+
+      const okxAdv = okx?.advanced || {};
+      const gmgnStats = gmgn?.stats || {};
+      const gmgnSec = gmgn?.security || {};
+      const jupData = jup?.found !== false && jup?.results?.[0] ? jup.results[0] : {};
+      
+      const metrics = {
+        top10_holder_pct: okxAdv.top10_pct ?? gmgnStats.top_10_holder_rate ?? null,
+        dev_wallet_pct: okxAdv.dev_holding_pct ?? gmgnStats.creator_token_status === "holding" ? 1 : null, // fallback
+        bundler_pct: okxAdv.bundle_pct ?? null,
+        sniper_pct: okxAdv.sniper_pct ?? gmgnStats.sniper_count ? (gmgnStats.sniper_count / (gmgnStats.holder_count || 1)) * 100 : null,
+        holder_count: gmgnStats.holder_count ?? jupData.holders ?? null,
+        bot_holders_pct: jupData.audit?.bot_holders_pct ?? null,
+        
+        has_mint_authority: gmgnSec.is_mintable ?? (jupData.audit ? !jupData.audit.mint_disabled : null),
+        is_blacklist_enabled: gmgnSec.is_blacklisted ?? null,
+        insiders_count: null, // Hard to map directly without specific endpoint
+        phishing_flag_pct: okxAdv.suspicious_pct ?? null,
+        liquidity_burnt_pct: okxAdv.lp_burned_pct ?? gmgnStats.burn_ratio ?? gmgnStats.burn_status === "burn" ? 100 : null,
+        rug_risk_score: okxAdv.risk_level ?? (gmgnSec.is_honeypot ? 100 : null)
+      };
+
+      updatePositionSecurityMetrics(newPosition.publicKey.toString(), metrics);
     });
 
     appendDecision({
@@ -1444,6 +1479,7 @@ export async function closePosition({ position_address, reason, closed_volume_ch
           volatility: tracked.volatility || null,
           fee_tvl_ratio: tracked.fee_tvl_ratio || null,
           organic_score: tracked.organic_score || null,
+          security_metrics: tracked.security_metrics || null,
           open_bin_metrics: tracked.open_bin_metrics || null,
           close_bin_metrics,
           amount_sol: tracked.amount_sol,
@@ -1757,6 +1793,7 @@ export async function closePosition({ position_address, reason, closed_volume_ch
         volatility: tracked.volatility || null,
         fee_tvl_ratio: tracked.fee_tvl_ratio || null,
         organic_score: tracked.organic_score || null,
+        security_metrics: tracked.security_metrics || null,
         open_bin_metrics: tracked.open_bin_metrics || null,
         close_bin_metrics,
         amount_sol: tracked.amount_sol,

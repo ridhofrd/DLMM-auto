@@ -8,7 +8,7 @@ import { log } from "../logger.js";
 async function runGmgnCli(command) {
   try {
     // Add --raw to ensure we get single-line JSON, and bypass shell execution policy
-    const fullCommand = `npx gmgn-cli ${command} --raw`;
+    const fullCommand = `node ./node_modules/gmgn-cli/dist/index.js ${command} --raw`;
     
     // Use execSync for simplicity in this utility, or could be wrapped in a promise
     const output = execSync(fullCommand, {
@@ -58,6 +58,11 @@ export async function getGMGNTokenStats(mint) {
       whale_count: data.wallet_tags_stat?.whale_wallets || 0,
       sniper_count: data.wallet_tags_stat?.sniper_wallets || 0,
       dev_holding_pct: data.stat?.creator_hold_rate,
+      holder_count: data.stat?.holder_count || 0,
+      top_10_holder_rate: data.stat?.top_10_holder_rate ? parseFloat(data.stat.top_10_holder_rate) * 100 : null,
+      top_bundler_trader_percentage: data.stat?.top_bundler_trader_percentage ? parseFloat(data.stat.top_bundler_trader_percentage) * 100 : null,
+      creator_token_status: data.dev?.creator_token_status || null,
+      burn_ratio: data.burn_ratio ? parseFloat(data.burn_ratio) * 100 : null,
       source: "gmgn-cli",
     };
   } catch (error) {

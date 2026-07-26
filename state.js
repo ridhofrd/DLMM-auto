@@ -116,6 +116,7 @@ export function trackPosition({
     confirmed_trailing_exit_until: null,
     trailing_active: false,
     open_bin_metrics: null,
+    security_metrics: null,
   };
   pushEvent(state, { action: "deploy", position, pool_name: pool_name || pool });
   save(state);
@@ -131,6 +132,17 @@ export function updatePositionOpenMetrics(position_address, metrics) {
     log("state", `Position ${position_address} updated with open_bin_metrics`);
   }
 }
+
+export function updatePositionSecurityMetrics(position_address, metrics) {
+  const state = load();
+  const pos = state.positions[position_address];
+  if (pos && !pos.closed) {
+    pos.security_metrics = metrics;
+    save(state);
+    log("state", `Position ${position_address} updated with security_metrics`);
+  }
+}
+
 
 /**
  * Mark a position as out of range (sets timestamp on first detection).
