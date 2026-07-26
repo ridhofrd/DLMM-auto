@@ -20,12 +20,13 @@ These files bootstrap the application, manage persistent configurations, and orc
 
 *   `index.js`: The main entry point. It registers background cron jobs, initializes the local state poller (`PNL_POLL_INTERVAL_MS`), and launches the Telegram, UI Server, and CLI interfaces.
 *   `config.js` & `user-config.json`: Handles configuration overrides. `config.js` establishes defaults, while `user-config.json` stores user-defined thresholds (e.g., risk limits, SL/TP targets).
-*   `state.js` & `state.json`: The source of truth for persistent off-chain metadata. Tracks position lifecycles, peak PnL (for Trailing TPs), pending drops, and user instructions.
+*   `state.js` & `state.json`: The source of truth for persistent off-chain metadata. Tracks position lifecycles, peak PnL (for Trailing TPs), pending drops, and user instructions. Note: There are also other large JSON files for state tracking such as `lessons.json`, `market-snapshots.json`, `pool-memory.json`, and `decision-log.json` which store historical data natively.
 *   `telegram.js`: Initializes the Telegram bot and handles the polling/webhook connection.
 *   `logger.js`: Centralized logging utility that categorizes and writes logs to the `logs/` directory.
 *   `briefing.js`: Generates daily performance summaries of agent operations to be sent to the user.
 *   `ui-server.js`: Bootstraps a lightweight backend server to serve the Next.js web UI.
-*   `agent.js` / `hivemind.js`: Orchestrates the LLM prompts and parses AI tool calls.
+*   `agent.js` / `prompt.js`: Handles the core ReAct agent loop and orchestrates LLM prompts.
+*   `hivemind.js`: Manages heartbeats, agent versions, and caches shared lessons across agent runs (`hivemind-cache.json`).
 
 ---
 
@@ -38,6 +39,11 @@ These files govern what the agent does in the background without human intervent
 *   `screening.js`: Scans the market for new pools, evaluates them against volume/liquidity thresholds, and builds prompts for the LLM to decide on capital deployment.
 *   `state.js`: Manages the background concurrency locks (`isManagementBusy`, `isScreeningBusy`) to prevent overlapping jobs.
 *   `trailing-confirm.js`: Handles the 15-second pending states for Trailing TP verification (ensuring PnL drops aren't RPC glitches before selling).
+
+### `src/agent/` (LLM Orchestration)
+Contains logic that interfaces directly with the LLM API.
+*   `llm-client.js`: Low-level wrapper for LLM provider API requests.
+*   `intent.js`: Analyzes intent to select appropriate tools for the agent.
 
 ### `src/domain/` (Pure Business Logic)
 Isolated logic functions containing zero I/O or side effects, making them highly unit-testable.
@@ -65,6 +71,7 @@ The `tools/` directory acts as the **I/O Layer**. It handles all external API re
 *   `pool-tracker.js`: Maintains an internal memory of pools observed over time to calculate velocity and acceleration of liquidity.
 *   `definitions.js`: JSON Schema definitions that map these JavaScript functions into strictly typed tools that the LLM can invoke.
 *   `executor.js`: A wrapper that safely executes the requested LLM tool calls.
+*   `agent-meridian.js`, `chart-indicators.js`, `okx.js`, `study.js`, `token.js`: Additional specialized tools for technical analysis, specific exchanges (like OKX), and token research.
 
 ---
 
@@ -87,6 +94,8 @@ The `tools/` directory acts as the **I/O Layer**. It handles all external API re
 3.  **Suspect PnL Guard**
     *   Solana RPCs occasionally report erroneous values (e.g., a `-100% PnL` glitch).
     *   If the calculated PnL is `< -90%`, but the wallet holds > `$0.01` USD in value, the agent flags it as a `Suspect PnL` and temporarily skips PnL-based closure rules to prevent false-positive panic selling.
+4.  **Liquidity Distribution Screening (`src/cycles/screening.js`)**
+    *   Actively screens out pools where liquidity is heavily concentrated (e.g. `> 85%`) in a narrow band of bins near the active price or when it's highly asymmetric (e.g. `> 0.80`), mitigating risks of sudden price gapping.
 
 ---
 *Generated at: 2026-07-26*
