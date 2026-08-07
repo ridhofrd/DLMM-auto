@@ -64,6 +64,25 @@ function isToolChoiceRequiredError(error) {
 }
 
 /**
+ * Attempt dynamic pool rotation via scripts/llm-pool when encountering 429/quota errors.
+ */
+async function tryRotatePool(reason) {
+  try {
+    const { rotate } = await import("../../scripts/llm-pool/lib/rotate.js");
+    const result = await rotate({ reason, force: true });
+    if (result?.rotated) {
+      _client = null; // force reload client on next getActiveClient()
+      _lastEnvMtime = 0;
+      return result;
+    }
+    return result;
+  } catch (err) {
+    log("warn", `llm-pool rotation skipped/unavailable: ${err.message}`);
+    return null;
+  }
+}
+
+/**
  * Handles LLM API call with robust retry, fallback models, and tool JSON repairing.
  */
 export async function chatCompletionWithRetry({
@@ -139,9 +158,31 @@ export async function chatCompletionWithRetry({
       }
       
       const errCode = error?.status || error?.error?.code || error?.code;
-      if (errCode === 429) {
-          throw error; // rate limit bubble up
+      const errMsg = String(error?.message || error?.error?.message || error || "");
+      const isQuotaOrRateLimit =
+        errCode === 429 ||
+        errCode === 402 ||
+        /quota|rate.?limit|usage.?limit|reached.*limit|weekly/i.test(errMsg);
+
+      // ─── Reactive Failover on 429 / Quota ───
+      if (isQuotaOrRateLimit) {
+        log("warn", `Active LLM key hit quota/rate limit: ${errMsg.slice(0, 120)}. Attempting instant pool rotation...`);
+        const rotation = await tryRotatePool(`runtime quota error (${errCode || 'quota'})`);
+        if (rotation?.rotated) {
+          log("agent", `Switched LLM key to [${rotation.active}]. Retrying request immediately...`);
+          attempt -= 1;
+          continue;
+        } else if (rotation?.depleted) {
+          log("error", "LLM key pool is completely depleted across all accounts.");
+          if (activeModel !== FALLBACK_MODEL) {
+            activeModel = FALLBACK_MODEL;
+            log("agent", `Switching to fallback model ${FALLBACK_MODEL}`);
+            continue;
+          }
+        }
+        throw error;
       }
+
       if (errCode === 502 || errCode === 503 || errCode === 529 || String(error).includes("fetch failed")) {
         const wait = (attempt + 1) * 5000;
         if (attempt === 1 && activeModel !== FALLBACK_MODEL) {

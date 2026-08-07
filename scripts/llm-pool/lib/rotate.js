@@ -75,7 +75,14 @@ export async function rotate({ reason = "manual", force = false, config: cfg } =
         applyFailure(state, fromId, probe, config, log);
       }
     } else if (fromId) {
-      markAccount(state, fromId, { state: "exhausted", last_error: reason });
+      const meta = getAccountMeta(state, fromId);
+      meta.state = "exhausted";
+      meta.last_error = reason;
+      meta.fail_count = (meta.fail_count || 0) + 1;
+      const isWeekly = /weekly/i.test(reason);
+      const hours = isWeekly ? (config.cooldown_weekly_days ?? 7) * 24 : (config.cooldown_session_hours ?? 5);
+      setCooldown(meta, hours);
+      log("warn", `Account ${fromId} marked exhausted (${reason}) — cooldown ${hours}h`);
     }
 
     const next = selectNext(accounts, state, config, { excludeId: fromId });
