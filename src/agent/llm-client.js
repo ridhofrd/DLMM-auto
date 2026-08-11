@@ -140,6 +140,9 @@ export async function chatCompletionWithRetry({
         }
       }
       
+      const usage = response.usage || {};
+      log("llm_usage", `Model: ${activeModel} | Prompt: ${usage.prompt_tokens || 0} | Completion: ${usage.completion_tokens || 0} | Total: ${usage.total_tokens || 0}`);
+      
       return { msg, updatedMessages: activeMessages, invalidToolArgErrors, providerMode };
 
     } catch (error) {
