@@ -116,10 +116,10 @@ export async function chatCompletionWithRetry({
         log("error", `Bad API response: ${JSON.stringify(response).slice(0, 200)}`);
         throw new Error(`API returned no choices: ${response.error?.message || JSON.stringify(response)}`);
       }
-      
+
       const msg = response.choices[0].message;
       const invalidToolArgErrors = new Map();
-      
+
       if (msg.tool_calls) {
         for (const tc of msg.tool_calls) {
           if (tc.function?.arguments) {
@@ -139,10 +139,10 @@ export async function chatCompletionWithRetry({
           }
         }
       }
-      
+
       const usage = response.usage || {};
       log("llm_usage", `Model: ${activeModel} | Prompt: ${usage.prompt_tokens || 0} | Completion: ${usage.completion_tokens || 0} | Total: ${usage.total_tokens || 0}`);
-      
+
       return { msg, updatedMessages: activeMessages, invalidToolArgErrors, providerMode };
 
     } catch (error) {
@@ -159,7 +159,7 @@ export async function chatCompletionWithRetry({
         attempt -= 1;
         continue;
       }
-      
+
       const errCode = error?.status || error?.error?.code || error?.code;
       const errMsg = String(error?.message || error?.error?.message || error || "");
       const isQuotaOrRateLimit =
