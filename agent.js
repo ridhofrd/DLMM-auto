@@ -122,6 +122,11 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
         log("agent", msg.content);
         return { content: msg.content, userMessage: goal };
       }
+
+      if (msg.content) {
+        log("agent_thinking", msg.content.trim().replace(/\n/g, " | "));
+      }
+
       sawToolCall = true;
 
       // Execute each tool call in parallel
