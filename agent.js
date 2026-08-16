@@ -11,6 +11,12 @@ import { getDecisionSummary } from "./data/decision-log.js";
 import { getToolsForRole, shouldRequireRealToolUse } from "./src/agent/intent.js";
 import { buildMessages, chatCompletionWithRetry } from "./src/agent/llm-client.js";
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /**
  * Core ReAct agent loop.
  *
@@ -102,6 +108,7 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
           log("agent", `Empty response, retrying... (${emptyResponseRetryCount}/3)`);
           
           if (emptyResponseRetryCount >= 3) {
+            dumpTrace(messages, "empty_responses_abort");
             log("agent", "Too many empty responses (likely hitting max_tokens). Aborting.");
             return {
               content: "I couldn't complete the task because the AI model repeatedly returned empty responses (likely hitting the max token limit).",
@@ -189,13 +196,20 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
           };
         }
 
+        log("agent", `[TOOL_EXEC] Executing ${functionName} with args: ${JSON.stringify(functionArgs)}`);
         await onToolStart?.({ name: functionName, args: functionArgs, step });
         const result = await executeTool(functionName, functionArgs);
+        
+        const isSuccess = result?.success !== false && !result?.error && !result?.blocked;
+        if (!isSuccess) {
+          log("error", `[TOOL_ERROR] ${functionName} failed: ${result?.error || result?.reason || JSON.stringify(result)}`);
+        }
+
         await onToolFinish?.({
           name: functionName,
           args: functionArgs,
           result,
-          success: result?.success !== false && !result?.error && !result?.blocked,
+          success: isSuccess,
           step,
         });
 
@@ -223,14 +237,31 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
       }
 
       // For other errors, break the loop
+      dumpTrace(messages, "fatal_error");
       throw error;
     }
   }
 
+  dumpTrace(messages, "max_steps_reached");
   log("agent", "Max steps reached without final answer");
   return { content: "Max steps reached. Review logs for partial progress.", userMessage: goal };
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function dumpTrace(messages, reason) {
+  try {
+    const traceDir = path.join(__dirname, 'ServerArtefact', 'traces');
+    if (!fs.existsSync(traceDir)) {
+      fs.mkdirSync(traceDir, { recursive: true });
+    }
+    const filename = `trace_${Date.now()}_${reason}.json`;
+    const filepath = path.join(traceDir, filename);
+    fs.writeFileSync(filepath, JSON.stringify(messages, null, 2));
+    log("error", `Trace dump saved to: ${filepath}`);
+  } catch (e) {
+    log("error", `Failed to save trace dump: ${e.message}`);
+  }
 }
