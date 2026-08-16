@@ -56,6 +56,7 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
   const mustUseRealTool = shouldRequireRealToolUse(goal, agentType, interactive);
   let sawToolCall = false;
   let noToolRetryCount = 0;
+  let emptyResponseRetryCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
     log("agent", `Step ${step + 1}/${maxSteps}`);
@@ -97,7 +98,21 @@ export async function agentLoop(goal, maxSteps = config.llm.maxSteps, sessionHis
         // Hermes sometimes returns null content — pop the empty message and retry once
         if (!msg.content) {
           messages.pop(); // remove the empty assistant message
-          log("agent", "Empty response, retrying...");
+          emptyResponseRetryCount += 1;
+          log("agent", `Empty response, retrying... (${emptyResponseRetryCount}/3)`);
+          
+          if (emptyResponseRetryCount >= 3) {
+            log("agent", "Too many empty responses (likely hitting max_tokens). Aborting.");
+            return {
+              content: "I couldn't complete the task because the AI model repeatedly returned empty responses (likely hitting the max token limit).",
+              userMessage: goal,
+            };
+          }
+          
+          messages.push({
+            role: providerMode === "system" ? "system" : "user",
+            content: "Your previous response was cut off or empty, likely because you hit the token limit. Please try again but be much more concise, and ensure you include a tool call if required."
+          });
           continue;
         }
         if (mustUseRealTool && !sawToolCall) {
