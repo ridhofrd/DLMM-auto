@@ -3,6 +3,7 @@ import fs from "fs";
 import dotenv from "dotenv";
 import { jsonrepair } from "jsonrepair";
 import { log } from "../../logger.js";
+import path from "path";
 
 let _client = null;
 let _lastEnvMtime = 0;
@@ -82,6 +83,37 @@ async function tryRotatePool(reason) {
   }
 }
 
+function trackTokenUsage(model, usage) {
+  if (!usage || Object.keys(usage).length === 0) return;
+  try {
+    const statsDir = path.resolve("ServerArtefact");
+    if (!fs.existsSync(statsDir)) fs.mkdirSync(statsDir, { recursive: true });
+    
+    const statsFile = path.join(statsDir, 'llm_usage_stats.json');
+    let stats = {};
+    if (fs.existsSync(statsFile)) {
+      stats = JSON.parse(fs.readFileSync(statsFile, "utf-8"));
+    }
+    
+    const date = new Date();
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (!stats[monthKey]) stats[monthKey] = {};
+    if (!stats[monthKey][model]) {
+      stats[monthKey][model] = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, requests: 0 };
+    }
+    
+    stats[monthKey][model].prompt_tokens += (usage.prompt_tokens || 0);
+    stats[monthKey][model].completion_tokens += (usage.completion_tokens || 0);
+    stats[monthKey][model].total_tokens += (usage.total_tokens || 0);
+    stats[monthKey][model].requests += 1;
+    
+    fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2));
+  } catch (e) {
+    log("error", `Failed to track token usage: ${e.message}`);
+  }
+}
+
 /**
  * Handles LLM API call with robust retry, fallback models, and tool JSON repairing.
  */
@@ -142,6 +174,8 @@ export async function chatCompletionWithRetry({
 
       const usage = response.usage || {};
       log("llm_usage", `Model: ${activeModel} | Prompt: ${usage.prompt_tokens || 0} | Completion: ${usage.completion_tokens || 0} | Total: ${usage.total_tokens || 0}`);
+      
+      trackTokenUsage(activeModel, usage);
 
       return { msg, updatedMessages: activeMessages, invalidToolArgErrors, providerMode };
 
