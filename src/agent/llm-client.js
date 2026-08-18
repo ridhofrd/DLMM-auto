@@ -96,17 +96,17 @@ function trackTokenUsage(model, usage) {
     }
     
     const date = new Date();
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     
-    if (!stats[monthKey]) stats[monthKey] = {};
-    if (!stats[monthKey][model]) {
-      stats[monthKey][model] = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, requests: 0 };
+    if (!stats[dayKey]) stats[dayKey] = {};
+    if (!stats[dayKey][model]) {
+      stats[dayKey][model] = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, requests: 0 };
     }
     
-    stats[monthKey][model].prompt_tokens += (usage.prompt_tokens || 0);
-    stats[monthKey][model].completion_tokens += (usage.completion_tokens || 0);
-    stats[monthKey][model].total_tokens += (usage.total_tokens || 0);
-    stats[monthKey][model].requests += 1;
+    stats[dayKey][model].prompt_tokens += (usage.prompt_tokens || 0);
+    stats[dayKey][model].completion_tokens += (usage.completion_tokens || 0);
+    stats[dayKey][model].total_tokens += (usage.total_tokens || 0);
+    stats[dayKey][model].requests += 1;
     
     fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2));
   } catch (e) {
