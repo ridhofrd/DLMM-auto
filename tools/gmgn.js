@@ -14,6 +14,7 @@ async function runGmgnCli(command) {
     const output = execSync(fullCommand, {
       encoding: "utf8",
       maxBuffer: 10 * 1024 * 1024,
+      timeout: 15000, // 15 seconds timeout to prevent freezing
       env: { ...process.env, FORCE_COLOR: "0" }
     });
 

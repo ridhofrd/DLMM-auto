@@ -34,7 +34,7 @@ export function getActiveClient() {
 }
 
 export const DEFAULT_MODEL = process.env.LLM_MODEL || "openrouter/healer-alpha";
-const FALLBACK_MODEL = "stepfun/step-3.5-flash:free";
+const FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
 
 export function buildMessages(systemPrompt, sessionHistory, goal, providerMode = "system") {
   if (providerMode === "user_embedded") {
