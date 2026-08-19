@@ -16,6 +16,16 @@ import { getMyPositions } from "./tools/dlmm.js";
 import { getPollTriggeredAt, setPollTriggeredAt } from "./src/cycles/concurrency.js";
 import chalk from "chalk";
 
+process.on("uncaughtException", (err) => {
+  log("error", `UNCAUGHT EXCEPTION: ${err.message}`);
+  console.error(err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  log("error", `UNHANDLED REJECTION: ${reason instanceof Error ? reason.message : JSON.stringify(reason)}`);
+  console.error(reason);
+});
+
 startUIServer();
 
 log("startup", "DLMM LP Agent starting...");
